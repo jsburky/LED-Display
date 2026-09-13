@@ -298,7 +298,7 @@ class GraphicsTest:
             "MASSIVE_CA_BUNDLE", "/etc/ssl/certs/ca-certificates.crt"
         )
         self.stock_symbols = [
-            "AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NFLX", "BA", "NVDA", "BABA", "FB", "V", "JPM", "JNJ", "WMT", "PG",
+            "AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NFLX", "BA", "NVDA", "BABA", "META", "V", "JPM", "JNJ", "WMT", "PG",
             "DIS", "MA", "PYPL", "UNH", "HD", "VZ", "ADBE", "CMCSA", "NFLX", "PFE", "KO", "PEP", "T", "ABT", "CSCO",
             "COST", "LLY", "AVGO", "MRK", "INTC", "XOM", "MCD", "NKE", "IBM", "CRM", "CVX", "TXN", "HON", "MDT", "WFC",
             "QCOM", "ACN", "ORCL", "LIN", "SCHW", "SBUX", "UPS", "MS", "BLK", "PM", "RTX", "NEE", "AMGN", "MMM", "GS",
@@ -307,7 +307,10 @@ class GraphicsTest:
             "MMC", "TFC", "ADP", "DUK", "BDX", "CL", "TGT", "BMY", "ECL", "ITW", "APD", "CCI", "EW", "CME", "FISV",
             "MSCI", "NSC", "MAR", "ICE", "MDLZ", "AEP", "EOG", "PGR", "MCO", "SO", "KDP", "A", "PPG", "ETN", "AIG",
             "AZO", "CDW", "CMG", "DG", "EQIX", "HSY", "PH", "SHW", "SNPS", "WM", "ADM", "BAX", "AFL", "ALL", "BXP",
-            "COF", "CPRT", "CTAS", "DD", "DLTR", "DTE", "EL", "EMR", "EXR", "FMC", "GLW", "HAS", "HUM", "IDXX", "IFF"
+            "COF", "CPRT", "CTAS", "DD", "DLTR", "DTE", "EL", "EMR", "EXR", "FMC", "GLW", "HAS", "HUM", "IDXX", "IFF",
+            "AMD", "ARM", "ASML", "PLTR", "PANW", "CRWD", "SNOW", "DDOG", "NET", "MDB", "UBER", "ABNB", "DASH", "SHOP",
+            "SPOT", "RBLX", "ROKU", "COIN", "MARA", "NIO", "LI", "XPEV", "RIVN", "F", "GM", "TM", "SONY", "NVO",
+            "AZN", "SHEL", "BP", "OXY", "SLB", "CVS", "MCK", "CIEN", "PINS", "WBD", "YUM", "LULU", "TJX"
         ]
 
         self.stock_prices = self.load_stock_prices()
