@@ -24,7 +24,7 @@ DEFAULT_CLOCK_COMMAND = [
     "--led-cols=64",
     "-m",
     "adafruit-hat",
-    "--led-slowdown-gpio=2",
+    "--led-slowdown-gpio=4",
 ]
 DEFAULT_DEVICE = os.environ.get("LED_INPUT_DEVICE")
 
