@@ -15,8 +15,9 @@ APP_DIR = Path(__file__).resolve().parent
 FONT_DIR = APP_DIR / "fonts"
 STOCK_CACHE_PATH = Path("stock_prices.json")
 
-lat = 40
-lon = -86
+USE_MANUAL_COORDINATES = False
+MANUAL_LATITUDE = 0.0
+MANUAL_LONGITUDE = 0.0
 
 # Centered high to allow peeking over clouds
 SUN_ART = [
@@ -291,6 +292,7 @@ class GraphicsTest:
         load_dotenv(Path(__file__).resolve().with_name(".env"))
         self.massive_api_key = os.environ.get("MASSIVE_API_KEY")
         self.weather_api_key = os.environ.get("WEATHER_API_KEY")
+        self.weather_latitude, self.weather_longitude = self.get_weather_location()
         self.stock_api_base_url = os.environ.get("MASSIVE_API_BASE_URL", "https://api.massive.com").rstrip('/')
         self.stock_ca_bundle = os.environ.get(
             "MASSIVE_CA_BUNDLE", "/etc/ssl/certs/ca-certificates.crt"
@@ -351,13 +353,25 @@ class GraphicsTest:
 
     def get_location(self):
         try:
-            response = requests.get('https://ipinfo.io/')
+            response = requests.get("https://ipinfo.io/json", timeout=15)
+            response.raise_for_status()
             data = response.json()
             loc = data['loc'].split(',')
-            return loc[0], loc[1]
+            return float(loc[0]), float(loc[1])
         except Exception:
             self.logger.exception("Error fetching location")
             return None, None
+
+    def get_weather_location(self):
+        if USE_MANUAL_COORDINATES:
+            return MANUAL_LATITUDE, MANUAL_LONGITUDE
+
+        latitude, longitude = self.get_location()
+        if latitude is not None and longitude is not None:
+            return latitude, longitude
+
+        self.logger.warning("Using manual coordinates because automatic location lookup failed")
+        return MANUAL_LATITUDE, MANUAL_LONGITUDE
 
     def get_weather_data(self, lat, lon):
         """Fetches temperature, condition, and day/night status."""
@@ -533,8 +547,10 @@ class GraphicsTest:
                     self.last_weather_toggle_time = time.time()
 
                 if time.time() - self.last_weather_update >= self.weather_update_interval:
-                    if lat and lon:
-                        fetched_data = self.get_weather_data(lat, lon)
+                    if self.weather_latitude is not None and self.weather_longitude is not None:
+                        fetched_data = self.get_weather_data(
+                            self.weather_latitude, self.weather_longitude
+                        )
                         if fetched_data:
                             self.weather_data = fetched_data
                     self.last_weather_update = time.time()
