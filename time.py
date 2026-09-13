@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 APP_DIR = Path(__file__).resolve().parent
 FONT_DIR = APP_DIR / "fonts"
-STOCK_CACHE_PATH = Path("/tmp/led-display-stock-prices.json")
+STOCK_CACHE_PATH = Path("stock_prices.json")
 
 lat = 40
 lon = -86
