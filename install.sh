@@ -4,12 +4,12 @@ set -e
 
 
 # ============================================================
-# Make sure script is running as root
+# Must be run with sudo
 # ============================================================
 
 if [[ $EUID -ne 0 ]]; then
     echo
-    echo "Please run this installer with:"
+    echo "Please run:"
     echo
     echo "    sudo ./install.sh"
     echo
@@ -28,6 +28,22 @@ TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 TARGET_GROUP="$(id -gn "$TARGET_USER")"
 
 
+# IMPORTANT:
+# Match the old working installation exactly.
+VENV_DIR="$TARGET_HOME/.venv"
+PYTHON="$VENV_DIR/bin/python3"
+
+MAIN_SCRIPT="$PROJECT_DIR/main.py"
+TIME_SCRIPT="$PROJECT_DIR/time.py"
+REQUIREMENTS="$PROJECT_DIR/requirements.txt"
+
+CONFIG_FILE="/boot/firmware/config.txt"
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+BLACKLIST_FILE="/etc/modprobe.d/blacklist.conf"
+
+SERVICE_FILE="/etc/systemd/system/program_launcher.service"
+
+
 echo
 echo "=========================================="
 echo " LED Display Installer"
@@ -36,139 +52,105 @@ echo
 echo "User:              $TARGET_USER"
 echo "Home directory:    $TARGET_HOME"
 echo "Project directory: $PROJECT_DIR"
+echo "Virtual env:       $VENV_DIR"
 echo
 
 
 # ============================================================
-# Paths
+# 1. Verify repository
 # ============================================================
 
-VENV_DIR="$PROJECT_DIR/.venv"
-PYTHON="$VENV_DIR/bin/python3"
-PIP="$VENV_DIR/bin/pip"
-
-MAIN_SCRIPT="$PROJECT_DIR/main.py"
-REQUIREMENTS="$PROJECT_DIR/requirements.txt"
-
-SHUTDOWN_SOURCE="$PROJECT_DIR/shutdown_services.sh"
-SHUTDOWN_DEST="$TARGET_HOME/shutdown_services.sh"
-
-SERVICE_FILE="/etc/systemd/system/program_launcher.service"
-
-BLACKLIST_FILE="/etc/modprobe.d/blacklist.conf"
-
-
-# ============================================================
-# Find Raspberry Pi boot files
-#
-# New Raspberry Pi OS:
-#   /boot/firmware/config.txt
-#
-# Older Raspberry Pi OS:
-#   /boot/config.txt
-# ============================================================
-
-if [[ -f /boot/firmware/config.txt ]]; then
-
-    CONFIG_FILE="/boot/firmware/config.txt"
-    CMDLINE_FILE="/boot/firmware/cmdline.txt"
-
-elif [[ -f /boot/config.txt ]]; then
-
-    CONFIG_FILE="/boot/config.txt"
-    CMDLINE_FILE="/boot/cmdline.txt"
-
-else
-
-    echo
-    echo "ERROR: Raspberry Pi boot configuration files were not found."
-    echo
-    exit 1
-
-fi
-
-
-# ============================================================
-# 1. Check project files
-# ============================================================
-
-echo "[1/13] Checking project files..."
+echo "[1/15] Checking repository..."
 
 
 if [[ ! -f "$MAIN_SCRIPT" ]]; then
-    echo
     echo "ERROR: main.py not found:"
-    echo
     echo "    $MAIN_SCRIPT"
-    echo
+    exit 1
+fi
+
+
+if [[ ! -f "$TIME_SCRIPT" ]]; then
+    echo "ERROR: time.py not found:"
+    echo "    $TIME_SCRIPT"
     exit 1
 fi
 
 
 if [[ ! -f "$REQUIREMENTS" ]]; then
-    echo
     echo "ERROR: requirements.txt not found:"
-    echo
     echo "    $REQUIREMENTS"
-    echo
     exit 1
 fi
 
 
-if [[ ! -f "$SHUTDOWN_SOURCE" ]]; then
-    echo
-    echo "ERROR: shutdown_services.sh not found:"
-    echo
-    echo "    $SHUTDOWN_SOURCE"
-    echo
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "ERROR: $CONFIG_FILE not found."
     exit 1
 fi
 
 
 if [[ ! -f "$CMDLINE_FILE" ]]; then
-    echo
-    echo "ERROR: cmdline.txt not found:"
-    echo
-    echo "    $CMDLINE_FILE"
-    echo
+    echo "ERROR: $CMDLINE_FILE not found."
     exit 1
 fi
 
 
 # ============================================================
-# 2. Update package lists
+# 2. apt update
+#
+# Old step:
+# sudo apt update
 # ============================================================
 
-echo "[2/13] Updating package lists..."
+echo "[2/15] Updating apt package lists..."
 
 apt-get update
 
 
 # ============================================================
-# 3. Install operating system dependencies
+# 3. Install EXACT system packages from old working setup
+#
+# Old steps:
+#
+# sudo apt install python3-venv
+#
+# sudo apt install -y \
+#     git build-essential cmake \
+#     python3-dev python3-pip cython3
+#
+# sudo apt-get install \
+#     python-dev-is-python3 python3-pil
+#
+# sudo apt install python3-evdev
 # ============================================================
 
-echo "[3/13] Installing system dependencies..."
+echo "[3/15] Installing system dependencies..."
 
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     git \
     build-essential \
     cmake \
     python3 \
+    python3-venv \
     python3-dev \
     python3-pip \
-    python3-venv \
-    python3-evdev \
+    python-dev-is-python3 \
     python3-pil \
+    python3-evdev \
     cython3
 
 
 # ============================================================
-# 4. Create Python virtual environment
+# 4. Create ~/.venv
+#
+# EXACTLY matches old:
+#
+# cd ~
+# python3 -m venv .venv
 # ============================================================
 
-echo "[4/13] Creating Python virtual environment..."
-
+echo "[4/15] Creating Python virtual environment..."
 
 if [[ ! -d "$VENV_DIR" ]]; then
 
@@ -177,18 +159,16 @@ if [[ ! -d "$VENV_DIR" ]]; then
 
 else
 
-    echo "    Existing virtual environment found."
+    echo "    Existing virtual environment found:"
+    echo "    $VENV_DIR"
 
 fi
 
 
 if [[ ! -x "$PYTHON" ]]; then
-
     echo
-    echo "ERROR: Failed to create Python virtual environment."
-    echo
+    echo "ERROR: Could not create virtual environment."
     exit 1
-
 fi
 
 
@@ -196,17 +176,25 @@ fi
 # 5. Upgrade pip
 # ============================================================
 
-echo "[5/13] Updating pip..."
+echo "[5/15] Updating pip..."
 
 sudo -u "$TARGET_USER" -H \
-    "$PYTHON" -m pip install --upgrade pip setuptools wheel
+    "$PYTHON" -m pip install --upgrade pip
 
 
 # ============================================================
-# 6. Install Python requirements
+# 6. Install requirements
+#
+# Equivalent to:
+#
+# source ~/.venv/bin/activate
+# cd LED-Display
+# pip install -r requirements.txt
+#
+# We don't actually need to 'source' the venv.
 # ============================================================
 
-echo "[6/13] Installing Python dependencies..."
+echo "[6/15] Installing requirements.txt..."
 
 sudo -u "$TARGET_USER" -H \
     "$PYTHON" -m pip install \
@@ -214,41 +202,59 @@ sudo -u "$TARGET_USER" -H \
 
 
 # ============================================================
-# 7. Install shutdown_services.sh
-# ============================================================
-
-echo "[7/13] Installing shutdown_services.sh..."
-
-cp \
-    "$SHUTDOWN_SOURCE" \
-    "$SHUTDOWN_DEST"
-
-
-chown \
-    "$TARGET_USER:$TARGET_GROUP" \
-    "$SHUTDOWN_DEST"
-
-
-chmod +x "$SHUTDOWN_DEST"
-
-
-# ============================================================
-# 8. Disable Raspberry Pi onboard audio
+# 7. Verify critical Python imports
 #
-# Set:
-#
-# dtparam=audio=off
+# main.py requires evdev
+# time.py requires rgbmatrix, requests and dotenv
 # ============================================================
 
-echo "[8/13] Disabling onboard audio..."
+echo "[7/15] Testing Python installation..."
+
+
+"$PYTHON" - <<'PYTHON_TEST'
+
+import sys
+
+modules = [
+    "evdev",
+    "rgbmatrix",
+    "requests",
+    "dotenv",
+]
+
+failed = []
+
+for module in modules:
+    try:
+        __import__(module)
+        print(f"    OK: {module}")
+    except Exception as error:
+        print(f"    FAILED: {module}: {error}")
+        failed.append(module)
+
+if failed:
+    print()
+    print("Missing required Python modules:")
+    for module in failed:
+        print(f"    {module}")
+
+    sys.exit(1)
+
+print()
+print("    Python dependency check passed.")
+
+PYTHON_TEST
+
+
+# ============================================================
+# 8. Configure onboard audio
+# ============================================================
+
+echo "[8/15] Disabling onboard audio..."
 
 
 if [[ ! -f "${CONFIG_FILE}.led-display.bak" ]]; then
-
-    cp \
-        "$CONFIG_FILE" \
-        "${CONFIG_FILE}.led-display.bak"
-
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.led-display.bak"
 fi
 
 
@@ -276,18 +282,15 @@ echo "    dtparam=audio=off"
 # 9. Blacklist snd_bcm2835
 # ============================================================
 
-echo "[9/13] Blacklisting snd_bcm2835..."
+echo "[9/15] Blacklisting snd_bcm2835..."
 
 
 touch "$BLACKLIST_FILE"
 
 
 if [[ ! -f "${BLACKLIST_FILE}.led-display.bak" ]]; then
-
-    cp \
-        "$BLACKLIST_FILE" \
-        "${BLACKLIST_FILE}.led-display.bak"
-
+    cp "$BLACKLIST_FILE" \
+       "${BLACKLIST_FILE}.led-display.bak"
 fi
 
 
@@ -306,22 +309,19 @@ echo "    blacklist snd_bcm2835"
 
 
 # ============================================================
-# 10. Add isolcpus=3
+# 10. isolcpus=3
 # ============================================================
 
-echo "[10/13] Configuring CPU isolation..."
+echo "[10/15] Configuring CPU isolation..."
 
 
 if [[ ! -f "${CMDLINE_FILE}.led-display.bak" ]]; then
-
-    cp \
-        "$CMDLINE_FILE" \
-        "${CMDLINE_FILE}.led-display.bak"
-
+    cp "$CMDLINE_FILE" \
+       "${CMDLINE_FILE}.led-display.bak"
 fi
 
 
-# cmdline.txt must remain one line.
+# cmdline.txt must stay one line.
 if ! grep -qw 'isolcpus=3' "$CMDLINE_FILE"; then
 
     sed -i '1 s/[[:space:]]*$//' "$CMDLINE_FILE"
@@ -334,18 +334,17 @@ echo "    isolcpus=3"
 
 
 # ============================================================
-# 11. Configure console autologin
+# 11. Configure Console Autologin
 # ============================================================
 
-echo "[11/13] Configuring console autologin..."
+echo "[11/15] Configuring console autologin..."
 
 
 if ! command -v raspi-config >/dev/null 2>&1; then
 
     echo
-    echo "ERROR: raspi-config was not found."
+    echo "ERROR: raspi-config not found."
     echo "This installer is intended for Raspberry Pi OS."
-    echo
     exit 1
 
 fi
@@ -356,10 +355,32 @@ env SUDO_USER="$TARGET_USER" \
 
 
 # ============================================================
-# 12. Create systemd service
+# 12. Make shutdown script executable
+#
+# main.py now accesses the copy INSIDE the project.
 # ============================================================
 
-echo "[12/13] Creating program_launcher.service..."
+echo "[12/15] Configuring shutdown script..."
+
+
+if [[ -f "$PROJECT_DIR/shutdown_services.sh" ]]; then
+
+    chmod +x "$PROJECT_DIR/shutdown_services.sh"
+
+else
+
+    echo
+    echo "WARNING: shutdown_services.sh not found."
+    echo
+
+fi
+
+
+# ============================================================
+# 13. Create systemd service
+# ============================================================
+
+echo "[13/15] Creating systemd service..."
 
 
 cat > "$SERVICE_FILE" << EOF
@@ -370,7 +391,6 @@ After=network-online.target
 
 [Service]
 Type=simple
-User=root
 
 WorkingDirectory=$PROJECT_DIR
 
@@ -393,17 +413,25 @@ chmod 644 "$SERVICE_FILE"
 
 
 # ============================================================
-# 13. Enable service
+# 14. Reload systemd
 # ============================================================
 
-echo "[13/13] Enabling program_launcher.service..."
+echo "[14/15] Reloading systemd..."
 
 systemctl daemon-reload
+
+
+# ============================================================
+# 15. Enable service
+# ============================================================
+
+echo "[15/15] Enabling program_launcher.service..."
+
 systemctl enable program_launcher.service
 
 
 # ============================================================
-# Finished
+# Finish
 # ============================================================
 
 echo
@@ -411,30 +439,25 @@ echo "=========================================="
 echo " Installation Complete"
 echo "=========================================="
 echo
-echo "Installed:"
+echo "Python:"
+echo "    $PYTHON"
 echo
-echo "    System dependencies"
-echo "    Python virtual environment"
-echo "    Python requirements"
+echo "Program:"
+echo "    $MAIN_SCRIPT"
+echo
+echo "Configured:"
+echo "    Python dependencies"
+echo "    RGB matrix dependencies"
+echo "    evdev"
 echo "    Console autologin"
 echo "    dtparam=audio=off"
 echo "    blacklist snd_bcm2835"
 echo "    isolcpus=3"
 echo "    program_launcher.service"
-echo "    shutdown_services.sh"
 echo
-echo "Virtual environment:"
-echo "    $VENV_DIR"
+echo "The Pi will reboot in 5 seconds."
+echo "Press Ctrl+C to cancel."
 echo
-echo "Service:"
-echo "    $SERVICE_FILE"
-echo
-echo "Boot configuration backups were created."
-echo
-echo "The Raspberry Pi will reboot in 5 seconds."
-echo "Press Ctrl+C to cancel the reboot."
-echo
-
 
 sleep 5
 
