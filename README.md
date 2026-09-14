@@ -1,4 +1,7 @@
 # LED Display
+![LED Screen Showing Time](/assets/screen_image_1.jpg)
+![LED Screen Showing Weather](/assets/screen_image_2.jpg)
+
 ## Parts Needed:
 - [Adafruit 64x64 display](https://www.adafruit.com/product/5362)
 - [Raspberry Pi Bonnet](https://www.adafruit.com/product/3211)
