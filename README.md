@@ -6,8 +6,8 @@ Run these commands:
 
 1. sudo apt update
 2. sudo apt install python3-venv
-3. sudo apt install -y git build-essential cmake python3-dev python3-pip python3-venv cython3
-4. sudo apt-get install python-dev-is-python3 python3-pil cython3
+3. sudo apt install -y git build-essential cmake python3-dev python3-pip cython3
+4. sudo apt-get install python-dev-is-python3 python3-pil
 5. sudo apt install python3-evdev
 6. python3 -m venv .venv
 7. source .venv/bin/activate
