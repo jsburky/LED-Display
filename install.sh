@@ -18,10 +18,10 @@ fi
 
 
 # ============================================================
-# Determine user information
+# Determine user/project information
 # ============================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TARGET_USER="${SUDO_USER:-$(logname)}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
@@ -30,12 +30,12 @@ TARGET_GROUP="$(id -gn "$TARGET_USER")"
 
 echo
 echo "=========================================="
-echo " LED Album Cover Installer"
+echo " LED Display Installer"
 echo "=========================================="
 echo
-echo "User:               $TARGET_USER"
-echo "Home directory:     $TARGET_HOME"
-echo "Installer location: $SCRIPT_DIR"
+echo "User:              $TARGET_USER"
+echo "Home directory:    $TARGET_HOME"
+echo "Project directory: $PROJECT_DIR"
 echo
 
 
@@ -43,33 +43,56 @@ echo
 # Paths
 # ============================================================
 
-SAMPLES_DIR="$TARGET_HOME/LED-Display"
+VENV_DIR="$PROJECT_DIR/.venv"
+PYTHON="$VENV_DIR/bin/python3"
+PIP="$VENV_DIR/bin/pip"
 
-PYTHON="$TARGET_HOME/.venv/bin/python3"
+MAIN_SCRIPT="$PROJECT_DIR/main.py"
+REQUIREMENTS="$PROJECT_DIR/requirements.txt"
 
-MAIN_SCRIPT="$SAMPLES_DIR/main.py"
+SHUTDOWN_SOURCE="$PROJECT_DIR/shutdown_services.sh"
+SHUTDOWN_DEST="$TARGET_HOME/shutdown_services.sh"
 
-CONFIG_FILE="/boot/firmware/config.txt"
+SERVICE_FILE="/etc/systemd/system/program_launcher.service"
 
 BLACKLIST_FILE="/etc/modprobe.d/blacklist.conf"
 
-CMDLINE_FILE="/boot/firmware/cmdline.txt"
-
 
 # ============================================================
-# Verify required files/directories
+# Find Raspberry Pi boot files
+#
+# New Raspberry Pi OS:
+#   /boot/firmware/config.txt
+#
+# Older Raspberry Pi OS:
+#   /boot/config.txt
 # ============================================================
 
-echo "[1/11] Checking installation..."
+if [[ -f /boot/firmware/config.txt ]]; then
 
-if [[ ! -d "$SAMPLES_DIR" ]]; then
+    CONFIG_FILE="/boot/firmware/config.txt"
+    CMDLINE_FILE="/boot/firmware/cmdline.txt"
+
+elif [[ -f /boot/config.txt ]]; then
+
+    CONFIG_FILE="/boot/config.txt"
+    CMDLINE_FILE="/boot/cmdline.txt"
+
+else
+
     echo
-    echo "ERROR: RGB matrix samples directory not found:"
-    echo
-    echo "    $SAMPLES_DIR"
+    echo "ERROR: Raspberry Pi boot configuration files were not found."
     echo
     exit 1
+
 fi
+
+
+# ============================================================
+# 1. Check project files
+# ============================================================
+
+echo "[1/13] Checking project files..."
 
 
 if [[ ! -f "$MAIN_SCRIPT" ]]; then
@@ -82,31 +105,21 @@ if [[ ! -f "$MAIN_SCRIPT" ]]; then
 fi
 
 
-if [[ ! -x "$PYTHON" ]]; then
+if [[ ! -f "$REQUIREMENTS" ]]; then
     echo
-    echo "ERROR: Python virtual environment not found:"
+    echo "ERROR: requirements.txt not found:"
     echo
-    echo "    $PYTHON"
+    echo "    $REQUIREMENTS"
     echo
     exit 1
 fi
 
 
-if [[ ! -f "$SCRIPT_DIR/shutdown_services.sh" ]]; then
+if [[ ! -f "$SHUTDOWN_SOURCE" ]]; then
     echo
     echo "ERROR: shutdown_services.sh not found:"
     echo
-    echo "    $SCRIPT_DIR/shutdown_services.sh"
-    echo
-    exit 1
-fi
-
-
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo
-    echo "ERROR: Could not find:"
-    echo
-    echo "    $CONFIG_FILE"
+    echo "    $SHUTDOWN_SOURCE"
     echo
     exit 1
 fi
@@ -114,7 +127,7 @@ fi
 
 if [[ ! -f "$CMDLINE_FILE" ]]; then
     echo
-    echo "ERROR: Could not find:"
+    echo "ERROR: cmdline.txt not found:"
     echo
     echo "    $CMDLINE_FILE"
     echo
@@ -123,87 +136,130 @@ fi
 
 
 # ============================================================
-# Create systemd service
+# 2. Update package lists
 # ============================================================
 
-echo "[2/11] Creating program_launcher.service..."
+echo "[2/13] Updating package lists..."
 
-cat > /etc/systemd/system/program_launcher.service << EOF
-[Unit]
-Description=LED Album Cover Program Launcher
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=simple
-
-WorkingDirectory=$SAMPLES_DIR
-
-ExecStart=$PYTHON $MAIN_SCRIPT
-
-Restart=always
-RestartSec=5
-
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-
-chmod 644 /etc/systemd/system/program_launcher.service
+apt-get update
 
 
 # ============================================================
-# Install shutdown_services.sh
+# 3. Install operating system dependencies
 # ============================================================
 
-echo "[3/11] Installing shutdown_services.sh..."
+echo "[3/13] Installing system dependencies..."
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    git \
+    build-essential \
+    cmake \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    cython3
+
+
+# ============================================================
+# 4. Create Python virtual environment
+# ============================================================
+
+echo "[4/13] Creating Python virtual environment..."
+
+
+if [[ ! -d "$VENV_DIR" ]]; then
+
+    sudo -u "$TARGET_USER" -H \
+        python3 -m venv "$VENV_DIR"
+
+else
+
+    echo "    Existing virtual environment found."
+
+fi
+
+
+if [[ ! -x "$PYTHON" ]]; then
+
+    echo
+    echo "ERROR: Failed to create Python virtual environment."
+    echo
+    exit 1
+
+fi
+
+
+# ============================================================
+# 5. Upgrade pip
+# ============================================================
+
+echo "[5/13] Updating pip..."
+
+sudo -u "$TARGET_USER" -H \
+    "$PYTHON" -m pip install --upgrade pip setuptools wheel
+
+
+# ============================================================
+# 6. Install Python requirements
+# ============================================================
+
+echo "[6/13] Installing Python dependencies..."
+
+sudo -u "$TARGET_USER" -H \
+    "$PYTHON" -m pip install \
+    -r "$REQUIREMENTS"
+
+
+# ============================================================
+# 7. Install shutdown_services.sh
+# ============================================================
+
+echo "[7/13] Installing shutdown_services.sh..."
 
 cp \
-    "$SCRIPT_DIR/shutdown_services.sh" \
-    "$TARGET_HOME/shutdown_services.sh"
+    "$SHUTDOWN_SOURCE" \
+    "$SHUTDOWN_DEST"
 
 
 chown \
     "$TARGET_USER:$TARGET_GROUP" \
-    "$TARGET_HOME/shutdown_services.sh"
+    "$SHUTDOWN_DEST"
 
 
-chmod +x \
-    "$TARGET_HOME/shutdown_services.sh"
+chmod +x "$SHUTDOWN_DEST"
 
 
 # ============================================================
-# Disable Raspberry Pi onboard audio
-#
-# Equivalent to:
-# sudo nano /boot/firmware/config.txt
+# 8. Disable Raspberry Pi onboard audio
 #
 # Set:
+#
 # dtparam=audio=off
 # ============================================================
 
-echo "[4/11] Disabling onboard audio..."
+echo "[8/13] Disabling onboard audio..."
 
-# Create backup once
-if [[ ! -f "${CONFIG_FILE}.led-album-cover.bak" ]]; then
-    cp "$CONFIG_FILE" "${CONFIG_FILE}.led-album-cover.bak"
+
+if [[ ! -f "${CONFIG_FILE}.led-display.bak" ]]; then
+
+    cp \
+        "$CONFIG_FILE" \
+        "${CONFIG_FILE}.led-display.bak"
+
 fi
 
 
-# Check whether a dtparam=audio line already exists
-if grep -qE '^[[:space:]]*dtparam=audio=' "$CONFIG_FILE"; then
+if grep -qE \
+    '^[[:space:]]*dtparam=audio=' \
+    "$CONFIG_FILE"; then
 
-    # Change existing setting to off
     sed -i -E \
         's/^[[:space:]]*dtparam=audio=.*/dtparam=audio=off/' \
         "$CONFIG_FILE"
 
 else
 
-    # Add setting if it does not exist
     echo >> "$CONFIG_FILE"
     echo "# Disabled for RGB LED matrix" >> "$CONFIG_FILE"
     echo "dtparam=audio=off" >> "$CONFIG_FILE"
@@ -215,28 +271,24 @@ echo "    dtparam=audio=off"
 
 
 # ============================================================
-# Blacklist snd_bcm2835
-#
-# Equivalent to:
-# sudo nano /etc/modprobe.d/blacklist.conf
-#
-# Add:
-# blacklist snd_bcm2835
+# 9. Blacklist snd_bcm2835
 # ============================================================
 
-echo "[5/11] Blacklisting snd_bcm2835..."
+echo "[9/13] Blacklisting snd_bcm2835..."
 
-# blacklist.conf may not exist, so create it if necessary
+
 touch "$BLACKLIST_FILE"
 
 
-# Create backup once
-if [[ ! -f "${BLACKLIST_FILE}.led-album-cover.bak" ]]; then
-    cp "$BLACKLIST_FILE" "${BLACKLIST_FILE}.led-album-cover.bak"
+if [[ ! -f "${BLACKLIST_FILE}.led-display.bak" ]]; then
+
+    cp \
+        "$BLACKLIST_FILE" \
+        "${BLACKLIST_FILE}.led-display.bak"
+
 fi
 
 
-# Add blacklist only if it isn't already present
 if ! grep -qE \
     '^[[:space:]]*blacklist[[:space:]]+snd_bcm2835([[:space:]]*)$' \
     "$BLACKLIST_FILE"; then
@@ -252,27 +304,22 @@ echo "    blacklist snd_bcm2835"
 
 
 # ============================================================
-# Add isolcpus=3 to kernel command line
-#
-# Equivalent to:
-# sudo nano /boot/firmware/cmdline.txt
-#
-# Add to END of existing line:
-# isolcpus=3
+# 10. Add isolcpus=3
 # ============================================================
 
-echo "[6/11] Isolating CPU core 3..."
+echo "[10/13] Configuring CPU isolation..."
 
-# Create backup once
-if [[ ! -f "${CMDLINE_FILE}.led-album-cover.bak" ]]; then
-    cp "$CMDLINE_FILE" "${CMDLINE_FILE}.led-album-cover.bak"
+
+if [[ ! -f "${CMDLINE_FILE}.led-display.bak" ]]; then
+
+    cp \
+        "$CMDLINE_FILE" \
+        "${CMDLINE_FILE}.led-display.bak"
+
 fi
 
 
-# cmdline.txt MUST remain one line.
-#
-# Only add isolcpus=3 if it is not already present.
-
+# cmdline.txt must remain one line.
 if ! grep -qw 'isolcpus=3' "$CMDLINE_FILE"; then
 
     sed -i '1 s/[[:space:]]*$//' "$CMDLINE_FILE"
@@ -285,25 +332,20 @@ echo "    isolcpus=3"
 
 
 # ============================================================
-# Configure Console Autologin
-#
-# Equivalent to:
-#
-# sudo raspi-config
-#
-# System Options
-#   -> Boot / Auto Login
-#       -> Console Autologin
+# 11. Configure console autologin
 # ============================================================
 
-echo "[7/11] Configuring console autologin..."
+echo "[11/13] Configuring console autologin..."
+
 
 if ! command -v raspi-config >/dev/null 2>&1; then
+
     echo
     echo "ERROR: raspi-config was not found."
-    echo "Are you running Raspberry Pi OS?"
+    echo "This installer is intended for Raspberry Pi OS."
     echo
     exit 1
+
 fi
 
 
@@ -312,59 +354,50 @@ env SUDO_USER="$TARGET_USER" \
 
 
 # ============================================================
-# Reload systemd
+# 12. Create systemd service
 # ============================================================
 
-echo "[8/11] Reloading systemd..."
+echo "[12/13] Creating program_launcher.service..."
+
+
+cat > "$SERVICE_FILE" << EOF
+[Unit]
+Description=LED Display Program Launcher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+
+WorkingDirectory=$PROJECT_DIR
+
+ExecStart=$PYTHON $MAIN_SCRIPT
+
+Restart=always
+RestartSec=5
+
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+
+chmod 644 "$SERVICE_FILE"
+
+
+# ============================================================
+# 13. Enable service
+# ============================================================
+
+echo "[13/13] Enabling program_launcher.service..."
 
 systemctl daemon-reload
-
-
-# ============================================================
-# Enable service
-# ============================================================
-
-echo "[9/11] Enabling program_launcher.service..."
-
 systemctl enable program_launcher.service
-
-
-# ============================================================
-# Start service
-# ============================================================
-
-echo "[10/11] Starting program_launcher.service..."
-
-systemctl restart program_launcher.service
-
-
-# ============================================================
-# Check service
-# ============================================================
-
-echo "[11/11] Checking service..."
-
-sleep 2
-
-
-if systemctl is-active --quiet program_launcher.service; then
-
-    echo
-    echo "program_launcher.service is running successfully."
-
-else
-
-    echo
-    echo "WARNING: program_launcher.service failed to start."
-    echo
-    echo "Check the logs with:"
-    echo
-    echo "    sudo journalctl -u program_launcher.service -n 50"
-    echo
-
-    exit 1
-
-fi
 
 
 # ============================================================
@@ -376,8 +409,11 @@ echo "=========================================="
 echo " Installation Complete"
 echo "=========================================="
 echo
-echo "Configured:"
+echo "Installed:"
 echo
+echo "    System dependencies"
+echo "    Python virtual environment"
+echo "    Python requirements"
 echo "    Console autologin"
 echo "    dtparam=audio=off"
 echo "    blacklist snd_bcm2835"
@@ -385,7 +421,13 @@ echo "    isolcpus=3"
 echo "    program_launcher.service"
 echo "    shutdown_services.sh"
 echo
-echo "Backups of modified boot files were created."
+echo "Virtual environment:"
+echo "    $VENV_DIR"
+echo
+echo "Service:"
+echo "    $SERVICE_FILE"
+echo
+echo "Boot configuration backups were created."
 echo
 echo "The Raspberry Pi will reboot in 5 seconds."
 echo "Press Ctrl+C to cancel the reboot."
