@@ -355,12 +355,18 @@ env SUDO_USER="$TARGET_USER" \
 
 
 # ============================================================
-# 12. Make shutdown script executable
+# 12. Configure project permissions
 #
 # main.py now accesses the copy INSIDE the project.
 # ============================================================
 
-echo "[12/15] Configuring shutdown script..."
+echo "[12/15] Configuring project permissions..."
+
+
+# time.py runs as daemon after the matrix library drops root privileges.
+# Keep the cache's owner and contents, but allow daemon to save stock prices.
+chgrp daemon "$PROJECT_DIR/stock_prices.json"
+chmod g+w "$PROJECT_DIR/stock_prices.json"
 
 
 if [[ -f "$PROJECT_DIR/shutdown_services.sh" ]]; then
@@ -449,6 +455,7 @@ echo "Configured:"
 echo "    Python dependencies"
 echo "    RGB matrix dependencies"
 echo "    evdev"
+echo "    Stock cache write permissions"
 echo "    Console autologin"
 echo "    dtparam=audio=off"
 echo "    blacklist snd_bcm2835"
