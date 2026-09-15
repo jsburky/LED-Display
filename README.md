@@ -1,63 +1,325 @@
 # LED Display
-![LED Screen Showing Time](/assets/screen_image_1.jpg)
-![LED Screen Showing Weather](/assets/screen_image_2.jpg)
 
-## Parts Needed:
-- [Adafruit 64x64 display](https://www.adafruit.com/product/5362)
-- [Raspberry Pi Bonnet](https://www.adafruit.com/product/3211)
-- 5V 4A Power Supply for 64x64 or 5V 15A for 128x128
-- Raspberry Pi (zero - 4) Would recommend a 4 for better peformance 
-- A computer with ssh capability. This can be done by connecting a monitor to the Pi but, it is easier with ssh because you can copy over code from this repository
-## Setting Up Raspberry Pi
-- For help with the next steps look [here](https://learn.adafruit.com/adafruit-rgb-matrix-plus-real-time-clock-hat-for-raspberry-pi/driving-matrices)
-- First, on the Raspberry Pi Bonnet solder the E pad to the 8 pad it should look like this:
+**Time, weather, and the market on a Raspberry Pi LED matrix.**
 
-  
-![Raspberry Pi Bonnet E Pad to 8 Pad Short](/assets/E8_Short.jpg)
+Turn a 64x64 RGB LED panel into an always-on information display. This Python project combines a clock, calendar, local weather, and a scrolling stock ticker, with a USB keypad for control and an installer that configures startup on boot.
 
+<p align="center">
+  <img src="assets/screen_image_1.jpg" alt="LED display showing the time, temperature, date, and scrolling stock prices" width="45%">
+  <img src="assets/screen_image_2.jpg" alt="LED display showing a weather icon alongside the time, date, and stock ticker" width="45%">
+</p>
 
-- Next, solder a jumper wire between GPIO 4 and GPIO 18. This will reduce the flicker. It should look like this:
+<p align="center"><em>The weather panel alternates between temperature and a conditions icon.</em></p>
 
-  
-![Raspberry Pi Bonnet GPIO 4 to GPIO 18 Short](/assets/GPIO_Short.jpg)
+[Features](#features) · [Parts](#parts) · [Hardware setup](#hardware-setup) · [Install software](#install-software) · [Controls](#controls-and-service-management) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting)
 
+## Features
 
-- Next, you want to plug in the power cable and ribbon cable (make sure its the "in" connection" to the led screen like this:
+- **Clock and calendar:** a 12-hour clock, month, and day using the Pi's local time.
+- **Local weather:** temperature in Fahrenheit and icons for clear skies, clouds, rain, snow, and storms, with day and night variants where applicable.
+- **Scrolling stock ticker:** recent daily closing prices from Massive, with green, red, and yellow indicators for changes from the previous available trading day.
+- **Automatic startup:** a systemd service launches the display when the Pi boots.
+- **Keypad controls:** restart the display or reboot the Pi from a connected keypad.
 
+Weather refreshes every five minutes, and the temperature/icon view switches every 15 seconds. Stock requests are spaced 12 seconds apart, so refreshing the full symbol list takes longer. Prices use trading days before the current UTC date.
 
-![Matrix Panel Wiring](/assets/Panel_Wires.jpg)
+## Parts
 
+This guide covers **one 64x64 HUB75 panel, an Adafruit RGB Matrix Bonnet, and a Raspberry Pi 3 or 4**. The display layout is designed for 64x64 pixels; other sizes require configuration and layout changes.
 
-- Then, cut off the other end of the power cable and attach to bonnet like this:
+| Part | Notes |
+| --- | --- |
+| [Adafruit 64x64 RGB LED matrix](https://www.adafruit.com/product/5362) | Include the HUB75 ribbon cable and panel power cable. |
+| [Adafruit RGB Matrix Bonnet](https://www.adafruit.com/product/3211) | Connects the panel to the Pi's 40-pin GPIO header. |
+| Raspberry Pi 3 or 4 | The installer reserves CPU core 3 for display use. Other Pi models may need adjustments. |
+| Matrix power supply | Regulated 5 V. The original parts list specifies 4 A; size the supply for your panel and brightness. |
+| Raspberry Pi power supply | Use a suitable supply connected to the Pi's power port. |
+| microSD card | For Raspberry Pi OS and the project files. |
+| USB numeric keypad or keyboard | Required by the default launcher, including at boot. |
+| Soldering iron, solder, and jumper wire | For the bonnet's address connection and optional flicker reduction. |
+| Computer and network connection | For imaging the card and connecting over SSH. A local monitor and keyboard also work. |
 
-  
-![Raspberry Pi Bonnet 5V Out](/assets/5V_Out.jpg)
+Internet access is needed for installation, weather, automatic location lookup, and stock updates. You will also need API keys from **Massive** and **OpenWeather**; setup is covered below.
 
+## Hardware setup
 
-- Connect ribbon cable to bonnet.
-- Use the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) to flash Raspberry Pi OS Lite (64/32 bit depending on which Pi is being used) to an SD Card. I would recommend going through the settings to set up a hostname, wifi, username and password, and enable ssh
-- Insert SD Card in Pi
-- Plug in the bonnet using the power supply. You can power the raspberry pi seperate or through the bonnet depending on current supply.
-- Once turned on, if set up properly, you can ssh from another computer using hostname@LOCAL_IP then entering the password. Or, you can attach a monitor and keyboard to setup
-  - LOCAL_IP usally takes the form of 192.168.1.### and can be found on your routers desktop settings as a connected device
+Disconnect power before soldering or changing connections. These steps follow [Adafruit's bonnet assembly guide](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/matrix-setup).
 
+### 1. Configure the bonnet for a 64x64 panel
 
+On the underside of the bonnet, bridge the center **E** pad to the **8** pad with solder. This is the connection for the linked Adafruit panel. For a different panel, check its datasheet: some use the **16** pad instead.
 
-## Cloning the Repo
-From the home directory of your Raspberry Pi
+<details>
+<summary>Photo: E-to-8 solder bridge</summary>
 
-Run these commands:
+<p align="center">
+  <img src="assets/E8_Short.jpg" alt="Solder bridge connecting the bonnet's E and 8 pads" width="520">
+</p>
 
-sudo apt update && sudo apt install -y git
+</details>
 
+### 2. Connect the panel and Pi
+
+1. Seat the bonnet on the Pi's 40-pin GPIO header, with all pins aligned.
+2. Connect the ribbon cable from the bonnet to the panel's **IN** connector.
+3. Connect the panel power cable to the bonnet's screw terminal: **red to 5 V**, **black to GND**. If the cable end does not fit, prepare the wire ends for the terminal and secure them firmly.
+4. Plug the USB keypad into the Pi.
+
+<details>
+<summary>Photos: panel cables and bonnet power terminal</summary>
+
+<p align="center">
+  <img src="assets/Panel_Wires.jpg" alt="Ribbon cable and power cable connected to the LED panel" width="40%">
+  <img src="assets/5V_Out.jpg" alt="Panel power wires connected to the bonnet's 5 V and ground terminals" width="50%">
+</p>
+
+</details>
+
+Power the panel through the bonnet's DC input and the Pi through its own power port. See [Adafruit's power guidance](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/pinouts) for supply requirements.
+
+### 3. Optional: reduce flicker
+
+Solder a jumper between the bonnet pads labeled **GPIO 4** and **GPIO 18**. These are GPIO numbers, not physical header pin numbers.
+
+<details>
+<summary>Photo: GPIO 4-to-18 jumper</summary>
+
+<p align="center">
+  <img src="assets/GPIO_Short.jpg" alt="Jumper wire connecting the bonnet's GPIO 4 and GPIO 18 pads" width="520">
+</p>
+
+</details>
+
+To use this modification, select **`adafruit-hat-pwm`** in the [display settings](#display-settings). The launcher currently defaults to `adafruit-hat`; installing the jumper does not change that setting automatically. See the matrix library's [hardware modification instructions](https://github.com/hzeller/rpi-rgb-led-matrix#improving-flicker-hardware-patch).
+
+## Set up Raspberry Pi OS
+
+1. Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/) to write **Raspberry Pi OS Lite** to the microSD card, choosing an image compatible with your Pi.
+2. Configure a username, password, hostname, Wi-Fi if needed, and **SSH access** in Imager.
+3. Insert the card, connect the hardware, and power on the Pi.
+4. Connect from a terminal on your computer:
+
+   ```bash
+   ssh YOUR_USERNAME@YOUR_PI_IP
+   ```
+
+   Replace both placeholders with your Pi's details. Your router's connected-device list can help you find its IP address.
+
+Set the Pi's timezone with `sudo raspi-config` if needed. The clock uses the operating system's timezone.
+
+The installer expects `/boot/firmware/config.txt` and `/boot/firmware/cmdline.txt`, plus Raspberry Pi OS's `raspi-config` utility. Older OS installations with boot files directly under `/boot` need installer changes.
+
+## Install software
+
+Run these commands **on the Raspberry Pi**, as your normal user. Use `sudo` only where shown.
+
+### 1. Install Git and download the project
+
+```bash
+sudo apt update
+sudo apt install -y git
+cd ~
 git clone https://github.com/jsburky/LED-Display.git
-
 cd LED-Display
+```
 
-Create a .env file copying the format from SAMPLE_ENV.txt
+### 2. Add your API keys
 
-Copy in API Keys from massive.com and openweather.com
+Create your configuration from the included example:
 
-Run sudo ./install.sh
+```bash
+cp SAMPLE_ENV.txt .env
+nano .env
+```
 
-After reboot, the display should be working.
+Replace the API key placeholders with your own values:
+
+```dotenv
+MASSIVE_API_KEY='YOUR_MASSIVE_API_KEY'
+WEATHER_API_KEY='YOUR_OPENWEATHER_API_KEY'
+```
+
+| Key | Where to get it | Used for |
+| --- | --- | --- |
+| `MASSIVE_API_KEY` | Your [Massive account](https://massive.com/) | Stock daily aggregate data. Your account must have access to the requested data. |
+| `WEATHER_API_KEY` | Your [OpenWeather API keys](https://home.openweathermap.org/api_keys) | Current weather through the `/data/2.5/weather` endpoint. |
+
+Save in Nano with **Ctrl+O**, **Enter**, then **Ctrl+X**. Keep your keys in `.env`, which is excluded from Git by the repository's `.gitignore`.
+
+The sample also includes `LED_INPUT_DEVICE`. The launcher currently uses automatic keypad detection and does **not** load `.env`; use the [launcher settings](#launcher-settings) if you need to select a device manually.
+
+### 3. Run the installer
+
+The installer sets up the software and automatic startup, then **reboots the Pi after a five-second countdown**. An SSH connection will disconnect during the reboot.
+
+```bash
+sudo ./install.sh
+```
+
+There is no separate dependency-install or virtual-environment activation step.
+
+<details>
+<summary>What the installer does</summary>
+
+- Installs the system packages needed to build and run the project.
+- Creates or reuses `~/.venv` for the user who invoked `sudo`.
+- Installs `requirements.txt`, including the RGB matrix Python bindings, and checks key imports.
+- Disables onboard audio and blacklists `snd_bcm2835` for matrix operation.
+- Adds `isolcpus=3` to the boot command line.
+- Enables console autologin and creates `program_launcher.service` to run the launcher as root.
+- Enables the service at boot, then reboots.
+
+Before its first edits to the boot and audio configuration files, the script saves copies with a `.led-display.bak` suffix.
+
+</details>
+
+### 4. Check the display
+
+Keep the keypad connected. After the Pi reboots, the launcher should start the clock automatically. Reconnect over SSH and check the service if the display stays blank:
+
+```bash
+sudo systemctl status program_launcher.service --no-pager
+```
+
+## Controls and service management
+
+| Key | Action |
+| --- | --- |
+| **1** | Start or restart the clock, weather, and stock display. |
+| **0** | Restart the launcher service through `shutdown_services.sh`. |
+| **9** | Reboot the Raspberry Pi. |
+
+The launcher also restarts the display program every hour by default.
+
+| Task | Command |
+| --- | --- |
+| Restart after changing settings | `sudo systemctl restart program_launcher.service` |
+| Stop the display | `sudo systemctl stop program_launcher.service` |
+| Start the display | `sudo systemctl start program_launcher.service` |
+| Show recent service logs | `sudo journalctl -u program_launcher.service -n 50 --no-pager` |
+| Follow service logs | `sudo journalctl -u program_launcher.service -f` |
+
+### Run the display manually
+
+For a direct test, including without a keypad, stop the service and run `time.py` using the installed Python environment:
+
+```bash
+sudo systemctl stop program_launcher.service
+cd ~/LED-Display
+sudo "$HOME/.venv/bin/python3" time.py \
+  --led-rows=64 \
+  --led-cols=64 \
+  --led-gpio-mapping=adafruit-hat \
+  --led-slowdown-gpio=4
+```
+
+Use `adafruit-hat-pwm` for the GPIO 4-to-18 modification. Press **Ctrl+C** to exit, then start the service again to restore keypad control.
+
+## Configuration
+
+Restart `program_launcher.service` after changing settings. The installer records your checkout's location, so keep the project in that directory after installation.
+
+### Weather and stocks
+
+| Setting | Where to change it |
+| --- | --- |
+| API keys | `.env` beside `time.py`. |
+| Weather location | Automatic lookup uses the Pi's public IP address through IPinfo. To choose a location, set `USE_MANUAL_COORDINATES = True` and enter `MANUAL_LATITUDE` and `MANUAL_LONGITUDE` near the top of `time.py`. |
+| Temperature units | `get_weather_data()` in `time.py` uses `units=imperial` for Fahrenheit; use `units=metric` for Celsius. |
+| Stock symbols | Edit `self.stock_symbols` in `time.py`. A shorter list takes less time to refresh. |
+| Weather refresh interval | `self.weather_update_interval` in `time.py`, in seconds. Default: `300`. |
+| Temperature/icon switch interval | `self.weather_toggle_interval` in `time.py`, in seconds. Default: `15`. |
+
+If automatic location lookup fails, the code falls back to the manual coordinates, initially `0.0, 0.0`. Set those values for your location if you want a useful fallback.
+
+### Display settings
+
+For automatic startup, edit `DEFAULT_CLOCK_COMMAND` near the top of `main.py`. For a manual run, pass the equivalent flags to `time.py`.
+
+| Option | Launcher setting | Purpose |
+| --- | --- | --- |
+| `--led-rows` / `--led-cols` | `64` / `64` | Panel dimensions. |
+| `-m` / `--led-gpio-mapping` | `adafruit-hat` | Use `adafruit-hat-pwm` with the GPIO 4-to-18 jumper. |
+| `--led-slowdown-gpio` | `4` | GPIO timing; may need adjustment for a different Pi or panel. |
+| `--led-brightness` | `100` by default | Add, for example, `--led-brightness=50` to lower brightness. |
+
+To see all supported display options:
+
+```bash
+"$HOME/.venv/bin/python3" ~/LED-Display/time.py --help
+```
+
+### Launcher settings
+
+`main.py` accepts `--device`, `--restart-seconds`, and `--clock-command`, or the corresponding environment variables `LED_INPUT_DEVICE`, `LED_RESTART_SECONDS`, and `LED_CLOCK_COMMAND`.
+
+For startup settings, use a systemd override. For example, if multiple keyboards are connected, identify the keypad's `eventX` handler in:
+
+```bash
+cat /proc/bus/input/devices
+```
+
+Then open the service override:
+
+```bash
+sudo systemctl edit program_launcher.service
+```
+
+Add the following, replacing `eventX` with the actual device:
+
+```ini
+[Service]
+Environment="LED_INPUT_DEVICE=/dev/input/eventX"
+Environment="LED_RESTART_SECONDS=3600"
+```
+
+Omit `LED_INPUT_DEVICE` to keep automatic selection. Set `LED_RESTART_SECONDS=0` to disable the hourly restart. Apply the changes:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart program_launcher.service
+```
+
+## Troubleshooting
+
+Start with the service logs:
+
+```bash
+sudo journalctl -u program_launcher.service -n 50 --no-pager
+```
+
+Display and API errors are also written to `error.log` in the project directory, or `/tmp/led-display-error.log` if the project log cannot be opened.
+
+| Problem | What to check |
+| --- | --- |
+| Blank display after reboot | Check service logs, panel power, the ribbon cable's **IN** connection, and the E-to-8 solder bridge. |
+| `No keypad found` | Connect a USB keypad/keyboard to the Pi. SSH input does not provide the local input device the launcher expects. Use a manual device setting if detection fails. |
+| `Multiple input devices found` | Select the intended keypad using the systemd override above. |
+| `No module named rgbmatrix` or `rgbmatrix.core` | Confirm the installer completed its import checks, and run with `~/.venv/bin/python3`. A different Python installation may not have the compiled bindings. |
+| Font-loading error | Keep the included `fonts/` directory beside `time.py` and ensure the files are readable. |
+| Weather shows `...` | Check the OpenWeather key, network connection, location settings, and display error log. |
+| Weather is for the wrong place | Set manual coordinates in `time.py`; IP-based location can be approximate. |
+| Stock prices show `N/A` or stay unchanged | Check the Massive key, account access, symbol availability, and error log. Cached prices may remain after failed requests; daily closing prices update with trading days. |
+| Visible flicker | Check the power supply and GPIO timing. If you installed the GPIO 4-to-18 jumper, select `adafruit-hat-pwm`. |
+| Installer cannot find `/boot/firmware/config.txt` | Check the Raspberry Pi OS version and boot-file layout against the installer requirements above. |
+| Time is incorrect | Check the Pi's timezone and time synchronization with `timedatectl`. |
+
+## Project files
+
+| File or directory | Purpose |
+| --- | --- |
+| [`main.py`](main.py) | Keypad detection, program launching, and periodic display restarts. |
+| [`time.py`](time.py) | Matrix rendering, clock, weather, and stock ticker. |
+| [`install.sh`](install.sh) | Dependencies, Pi configuration, and startup service installation. |
+| [`requirements.txt`](requirements.txt) | Python dependencies. |
+| [`SAMPLE_ENV.txt`](SAMPLE_ENV.txt) | Example configuration to copy to `.env`. |
+| [`shutdown_services.sh`](shutdown_services.sh) | Helper used by key **0** to restart the launcher service. |
+| [`fonts/`](fonts/) | Bitmap fonts used by the display. |
+| [`assets/`](assets/) | Project and assembly photos. |
+| [`stock_prices.json`](stock_prices.json) | Cached stock prices; the running display attempts to update this file. |
+
+## Credits and license
+
+Matrix control uses [Henner Zeller's rpi-rgb-led-matrix library](https://github.com/hzeller/rpi-rgb-led-matrix). Weather comes from [OpenWeather](https://openweathermap.org/), stock data from [Massive](https://massive.com/), and automatic location lookup from [IPinfo](https://ipinfo.io/).
+
+Project code is available under the [MIT License](LICENSE). See the [font documentation](fonts/README.md) for font attribution and licensing.
