@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument(
         "--clock-command",
         default=os.environ.get("LED_CLOCK_COMMAND"),
-        help="shell-like command for key 2 (default: local time.py)",
+        help="shell-like command for key 1 (default: local time.py)",
     )
     return parser.parse_args()
 
@@ -104,7 +104,7 @@ def build_commands(clock_command):
     shutdown = ["bash", str(shutdown_script)] if shutdown_script.exists() else ["bash", "shutdown_services.sh"]
     return {
         "0": shutdown,
-        "2": clock,
+        "1": clock,
         "9": ["sudo", "reboot"],
     }
 
@@ -136,7 +136,7 @@ def execute_command(key):
     with process_lock:
         stop_current_process()
         current_process = subprocess.Popen(command)
-        if key == "2" and restart_seconds > 0:
+        if key == "1" and restart_seconds > 0:
             reset_timer = threading.Timer(restart_seconds, restart_clock)
             reset_timer.daemon = True
             reset_timer.start()
@@ -148,7 +148,7 @@ def restart_clock():
         if current_process is not None:
             current_process.terminate()
             print("Restarting clock script")
-            current_process = subprocess.Popen(commands["2"])
+            current_process = subprocess.Popen(commands["1"])
             reset_timer = threading.Timer(restart_seconds, restart_clock)
             reset_timer.daemon = True
             reset_timer.start()
@@ -169,7 +169,7 @@ def main():
     restart_seconds = args.restart_seconds
     device = find_keypad(args.device)
 
-    execute_command("2")
+    execute_command("1")
     keypad_thread = threading.Thread(target=read_keypad, args=(device,), daemon=True)
     keypad_thread.start()
 
