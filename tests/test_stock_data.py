@@ -3,15 +3,16 @@ import pytest
 from stock_data import parse_yahoo_chart
 
 
-def chart_data(closes):
+def chart_data(closes, previous_close=None):
+    chart = {
+        "timestamp": list(range(len(closes))),
+        "indicators": {"quote": [{"close": closes}]},
+    }
+    if previous_close is not None:
+        chart["meta"] = {"previousClose": previous_close}
     return {
         "chart": {
-            "result": [
-                {
-                    "timestamp": list(range(len(closes))),
-                    "indicators": {"quote": [{"close": closes}]},
-                }
-            ]
+            "result": [chart]
         }
     }
 
@@ -29,6 +30,12 @@ def test_parse_yahoo_chart_uses_latest_close_and_direction():
 )
 def test_parse_yahoo_chart_sets_direction(closes, status):
     assert parse_yahoo_chart(chart_data(closes), "AAPL")["status"] == status
+
+
+def test_parse_yahoo_chart_compares_live_price_to_previous_close():
+    result = parse_yahoo_chart(chart_data([336.95, 337.0], 332.41), "AAPL")
+
+    assert result == {"text": "AAPL: $337.00", "status": "up"}
 
 
 def test_parse_yahoo_chart_skips_missing_close_values():

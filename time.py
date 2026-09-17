@@ -17,6 +17,9 @@ FONT_DIR = APP_DIR / "fonts"
 STOCK_CACHE_PATH = APP_DIR / "stock_prices.json"
 YAHOO_FINANCE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 SYSTEM_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
+YAHOO_CHART_RANGE = os.environ.get("YAHOO_CHART_RANGE", "1d")
+YAHOO_CHART_INTERVAL = os.environ.get("YAHOO_CHART_INTERVAL", "1m")
+STOCK_REQUEST_DELAY_SECONDS = float(os.environ.get("STOCK_REQUEST_DELAY_SECONDS", "2"))
 
 USE_MANUAL_COORDINATES = False
 MANUAL_LATITUDE = 0.0
@@ -389,9 +392,13 @@ class GraphicsTest:
             return None
 
     def update_stock_price(self, symbol):
-        """Fetch the latest two Yahoo Finance daily bars."""
+        """Fetch the latest two Yahoo Finance intraday bars."""
         url = f"{YAHOO_FINANCE_URL}/{symbol}"
-        params = {"range": "10d", "interval": "1d", "events": "history"}
+        params = {
+            "range": YAHOO_CHART_RANGE,
+            "interval": YAHOO_CHART_INTERVAL,
+            "events": "history",
+        }
 
         try:
             response = requests.get(
@@ -420,7 +427,7 @@ class GraphicsTest:
                     last_update_time = self.last_update_times.get(symbol)
                     if last_update_time is None or datetime.now() - last_update_time >= self.update_interval:
                         self.update_stock_price(symbol)
-                        time.sleep(12)  # Respect API rate limit (5 calls/min)
+                        time.sleep(STOCK_REQUEST_DELAY_SECONDS)
                 time.sleep(10)
             except Exception:
                 self.logger.exception("An error occurred in the schedule_updates thread")

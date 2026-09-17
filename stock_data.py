@@ -4,6 +4,7 @@
 def parse_yahoo_chart(data, symbol):
     """Return display text and direction from a Yahoo chart response."""
     chart = data["chart"]["result"][0]
+    previous_close = chart.get("meta", {}).get("previousClose")
     timestamps = chart.get("timestamp", [])
     closes = chart["indicators"]["quote"][0].get("close", [])
     bars = [
@@ -16,8 +17,9 @@ def parse_yahoo_chart(data, symbol):
 
     latest_close = bars[-1][1]
     status = "flat"
-    if len(bars) > 1:
+    if previous_close is None and len(bars) > 1:
         previous_close = bars[-2][1]
+    if previous_close is not None:
         if latest_close > previous_close:
             status = "up"
         elif latest_close < previous_close:

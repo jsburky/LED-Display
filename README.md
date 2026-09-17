@@ -17,11 +17,11 @@ Turn a 64x64 RGB LED panel into an always-on information display. This Python pr
 
 - **Clock and calendar:** a 12-hour clock, month, and day using the Pi's local time.
 - **Local weather:** temperature in Fahrenheit and icons for clear skies, clouds, rain, snow, and storms, with day and night variants where applicable.
-- **Scrolling stock ticker:** recent Yahoo Finance prices, with green, red, and yellow indicators for changes from the previous available trading day.
+- **Scrolling stock ticker:** near-live Yahoo Finance one-minute prices, with green, red, and yellow indicators for changes from the previous session's close.
 - **Automatic startup:** a systemd service launches the display when the Pi boots.
 - **Keypad controls:** restart the display or reboot the Pi from a connected keypad.
 
-Weather refreshes every five minutes, and the temperature/icon view switches every 15 seconds. Stock requests are spaced 12 seconds apart, so refreshing the full symbol list takes longer. Prices use trading days before the current UTC date.
+Weather refreshes every five minutes, and the temperature/icon view switches every 15 seconds. Stock requests are spaced two seconds apart, for a maximum of about 1,800 requests per hour. Yahoo data may be delayed and is subject to unofficial endpoint throttling; lower the request rate if temporary blocks occur.
 
 ## Parts
 
@@ -238,6 +238,7 @@ Restart `program_launcher.service` after changing settings. The installer record
 | Weather location | Automatic lookup uses the Pi's public IP address through IPinfo. To choose a location, set `USE_MANUAL_COORDINATES = True` and enter `MANUAL_LATITUDE` and `MANUAL_LONGITUDE` near the top of `time.py`. |
 | Temperature units | `get_weather_data()` in `time.py` uses `units=imperial` for Fahrenheit; use `units=metric` for Celsius. |
 | Stock symbols | Edit `self.stock_symbols` in `time.py`. A shorter list takes less time to refresh. |
+| Stock data speed | Set `STOCK_REQUEST_DELAY_SECONDS` in the service environment; the default is `2` seconds. `YAHOO_CHART_RANGE` and `YAHOO_CHART_INTERVAL` control the Yahoo chart window and interval. |
 | Weather refresh interval | `self.weather_update_interval` in `time.py`, in seconds. Default: `300`. |
 | Temperature/icon switch interval | `self.weather_toggle_interval` in `time.py`, in seconds. Default: `15`. |
 
