@@ -365,6 +365,7 @@ echo "[12/15] Configuring project permissions..."
 
 # time.py runs as daemon after the matrix library drops root privileges.
 # Keep the cache's owner and contents, but allow daemon to save stock prices.
+chmod o+x "$TARGET_HOME"
 chgrp daemon "$PROJECT_DIR/stock_prices.json"
 chmod g+w "$PROJECT_DIR/stock_prices.json"
 

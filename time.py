@@ -13,7 +13,9 @@ from dotenv import load_dotenv
 
 APP_DIR = Path(__file__).resolve().parent
 FONT_DIR = APP_DIR / "fonts"
-STOCK_CACHE_PATH = Path("stock_prices.json")
+STOCK_CACHE_PATH = APP_DIR / "stock_prices.json"
+YAHOO_FINANCE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
+SYSTEM_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
 
 USE_MANUAL_COORDINATES = False
 MANUAL_LATITUDE = 0.0
@@ -290,13 +292,8 @@ class GraphicsTest:
 
         # Replace with your actual Weather API key
         load_dotenv(Path(__file__).resolve().with_name(".env"))
-        self.massive_api_key = os.environ.get("MASSIVE_API_KEY")
         self.weather_api_key = os.environ.get("WEATHER_API_KEY")
         self.weather_latitude, self.weather_longitude = self.get_weather_location()
-        self.stock_api_base_url = os.environ.get("MASSIVE_API_BASE_URL", "https://api.massive.com").rstrip('/')
-        self.stock_ca_bundle = os.environ.get(
-            "MASSIVE_CA_BUNDLE", "/etc/ssl/certs/ca-certificates.crt"
-        )
         self.stock_symbols = [
             "AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NFLX", "BA", "NVDA", "BABA", "META", "V", "JPM", "JNJ", "WMT", "PG",
             "DIS", "MA", "PYPL", "UNH", "HD", "VZ", "ADBE", "CMCSA", "NFLX", "PFE", "KO", "PEP", "T", "ABT", "CSCO",
@@ -316,11 +313,8 @@ class GraphicsTest:
         self.stock_prices = self.load_stock_prices()
         self.last_update_times = {symbol: None for symbol in self.stock_symbols}
         self.update_interval = timedelta(minutes=5) # Increased interval for more complex query
-        if self.massive_api_key:
-            self.update_thread = threading.Thread(target=self.schedule_updates, daemon=True)
-            self.update_thread.start()
-        else:
-            self.logger.warning("MASSIVE_API_KEY is not configured; stock updates are disabled")
+        self.update_thread = threading.Thread(target=self.schedule_updates, daemon=True)
+        self.update_thread.start()
 
         self.last_weather_update = 0
         self.weather_update_interval = 300  # Fetch new weather data every 5 minutes
@@ -394,49 +388,47 @@ class GraphicsTest:
             return None
 
     def update_stock_price(self, symbol):
-        """Fetches last two trading days to determine price change."""
-        today = datetime.utcnow()
-        # Match the tested API's seven-day window for recent trading days.
-        to_date = (today - timedelta(days=1)).strftime('%Y-%m-%d')
-        from_date = (today - timedelta(days=7)).strftime('%Y-%m-%d')
-
-        url = f'{self.stock_api_base_url}/v2/aggs/ticker/{symbol}/range/1/day/{from_date}/{to_date}'
-        params = {'apiKey': self.massive_api_key, 'sort': 'desc', 'limit': 2}
+        """Fetch the latest two Yahoo Finance daily bars."""
+        url = f"{YAHOO_FINANCE_URL}/{symbol}"
+        params = {"range": "10d", "interval": "1d", "events": "history"}
 
         try:
-            if not self.massive_api_key:
-                raise ValueError("Missing MASSIVE_API_KEY in environment or .env")
             response = requests.get(
                 url,
                 params=params,
                 timeout=15,
-                verify=self.stock_ca_bundle,
+                headers={"User-Agent": "Mozilla/5.0"},
+                verify=SYSTEM_CA_BUNDLE,
             )
-            response.raise_for_status() # Raise HTTPError for bad responses
-            data = response.json()
+            response.raise_for_status()
+            chart = response.json()["chart"]["result"][0]
+            timestamps = chart.get("timestamp", [])
+            closes = chart["indicators"]["quote"][0].get("close", [])
+            bars = [
+                (timestamp, close)
+                for timestamp, close in zip(timestamps, closes)
+                if close is not None
+            ]
+            if not bars:
+                raise ValueError(f"Yahoo returned no closing prices for {symbol}")
 
             status = 'flat'
-            price_text = f"{symbol}: N/A"
+            latest_close = bars[-1][1]
+            price_text = f"{symbol}: ${latest_close:.2f}"
 
-            if 'results' in data and len(data['results']) > 0:
-                latest_close = data['results'][0]['c']
-                price_text = f"{symbol}: ${latest_close:.2f}"
-
-                if len(data['results']) > 1:
-                    previous_close = data['results'][1]['c']
-                    if latest_close > previous_close:
-                        status = 'up'
-                    elif latest_close < previous_close:
-                        status = 'down'
+            if len(bars) > 1:
+                previous_close = bars[-2][1]
+                if latest_close > previous_close:
+                    status = 'up'
+                elif latest_close < previous_close:
+                    status = 'down'
 
             self.stock_prices[symbol] = {'text': price_text, 'status': status}
             self.last_update_times[symbol] = datetime.now()
             self.save_stock_prices()
 
         except Exception as error:
-            # Request exceptions can include the API key in their URL.
-            message = str(error).replace(self.massive_api_key, "<redacted>") if self.massive_api_key else str(error)
-            self.logger.error("Error fetching stock data for %s: %s", symbol, message)
+            self.logger.error("Error fetching Yahoo stock data for %s: %s", symbol, error)
             # Use cached data if available on error
             if symbol not in self.stock_prices:
                 self.stock_prices[symbol] = {'text': f"{symbol}: N/A", 'status': 'flat'}

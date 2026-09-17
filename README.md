@@ -17,7 +17,7 @@ Turn a 64x64 RGB LED panel into an always-on information display. This Python pr
 
 - **Clock and calendar:** a 12-hour clock, month, and day using the Pi's local time.
 - **Local weather:** temperature in Fahrenheit and icons for clear skies, clouds, rain, snow, and storms, with day and night variants where applicable.
-- **Scrolling stock ticker:** recent daily closing prices from Massive, with green, red, and yellow indicators for changes from the previous available trading day.
+- **Scrolling stock ticker:** recent Yahoo Finance prices, with green, red, and yellow indicators for changes from the previous available trading day.
 - **Automatic startup:** a systemd service launches the display when the Pi boots.
 - **Keypad controls:** restart the display or reboot the Pi from a connected keypad.
 
@@ -39,7 +39,7 @@ This guide covers **one 64x64 HUB75 panel, an Adafruit RGB Matrix Bonnet, and a 
 | Soldering iron, solder, and jumper wire | For the bonnet's address connection and optional flicker reduction. |
 | Computer and network connection | For imaging the card and connecting over SSH. A local monitor and keyboard also work. |
 
-Internet access is needed for installation, weather, automatic location lookup, and stock updates. You will also need API keys from **Massive** and **OpenWeather**; setup is covered below.
+Internet access is needed for installation, weather, automatic location lookup, and stock updates. You will need an API key from **OpenWeather**; setup is covered below.
 
 ## Hardware setup
 
@@ -132,16 +132,14 @@ cp SAMPLE_ENV.txt .env
 nano .env
 ```
 
-Replace the API key placeholders with your own values:
+Replace the weather API key placeholder with your own value:
 
 ```dotenv
-MASSIVE_API_KEY='YOUR_MASSIVE_API_KEY'
 WEATHER_API_KEY='YOUR_OPENWEATHER_API_KEY'
 ```
 
 | Key | Where to get it | Used for |
 | --- | --- | --- |
-| `MASSIVE_API_KEY` | Your [Massive account](https://massive.com/) | Stock daily aggregate data. Your account must have access to the requested data. |
 | `WEATHER_API_KEY` | Your [OpenWeather API keys](https://home.openweathermap.org/api_keys) | Current weather through the `/data/2.5/weather` endpoint. |
 
 Save in Nano with **Ctrl+O**, **Enter**, then **Ctrl+X**. Keep your keys in `.env`, which is excluded from Git by the repository's `.gitignore`.
@@ -299,7 +297,7 @@ Display and API errors are also written to `error.log` in the project directory,
 | Font-loading error | Keep the included `fonts/` directory beside `time.py` and ensure the files are readable. |
 | Weather shows `...` | Check the OpenWeather key, network connection, location settings, and display error log. |
 | Weather is for the wrong place | Set manual coordinates in `time.py`; IP-based location can be approximate. |
-| Stock prices show `N/A` or stay unchanged | Check the Massive key, account access, symbol availability, and error log. Cached prices may remain after failed requests; daily closing prices update with trading days. |
+| Stock prices show `N/A` or stay unchanged | Check internet access, Yahoo Finance availability, symbol availability, and the error log. Cached prices may remain after failed requests; daily prices update with trading days. |
 | Visible flicker | Check the power supply and GPIO timing. If you installed the GPIO 4-to-18 jumper, select `adafruit-hat-pwm`. |
 | Installer cannot find `/boot/firmware/config.txt` | Check the Raspberry Pi OS version and boot-file layout against the installer requirements above. |
 | Time is incorrect | Check the Pi's timezone and time synchronization with `timedatectl`. |
@@ -320,6 +318,6 @@ Display and API errors are also written to `error.log` in the project directory,
 
 ## Credits and license
 
-Matrix control uses [Henner Zeller's rpi-rgb-led-matrix library](https://github.com/hzeller/rpi-rgb-led-matrix). Weather comes from [OpenWeather](https://openweathermap.org/), stock data from [Massive](https://massive.com/), and automatic location lookup from [IPinfo](https://ipinfo.io/).
+Matrix control uses [Henner Zeller's rpi-rgb-led-matrix library](https://github.com/hzeller/rpi-rgb-led-matrix). Weather comes from [OpenWeather](https://openweathermap.org/), stock data from [Yahoo Finance](https://finance.yahoo.com/), and automatic location lookup from [IPinfo](https://ipinfo.io/).
 
 Project code is available under the [MIT License](LICENSE). See the [font documentation](fonts/README.md) for font attribution and licensing.
