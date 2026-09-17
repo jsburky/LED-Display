@@ -154,6 +154,19 @@ The installer sets up the software and automatic startup, then **reboots the Pi 
 sudo ./install.sh
 ```
 
+The installer creates `program_launcher.service`, configures the Raspberry Pi
+for the display, and installs the runtime dependencies. To remove the service
+and restore configuration files saved by the installer:
+
+```bash
+sudo ./uninstall.sh
+```
+
+The uninstall keeps the project, `.env`, stock cache, error log, and virtual
+environment by default. Use `--remove-venv`, `--remove-cache`, or
+`--remove-log` when those items should also be removed. Console autologin is
+not changed by the uninstall script.
+
 There is no separate dependency-install or virtual-environment activation step.
 
 <details>
@@ -309,7 +322,10 @@ Display and API errors are also written to `error.log` in the project directory,
 | [`main.py`](main.py) | Keypad detection, program launching, and periodic display restarts. |
 | [`time.py`](time.py) | Matrix rendering, clock, weather, and stock ticker. |
 | [`install.sh`](install.sh) | Dependencies, Pi configuration, and startup service installation. |
+| [`uninstall.sh`](uninstall.sh) | Stops and removes the service and restores installer backups. |
 | [`requirements.txt`](requirements.txt) | Python dependencies. |
+| [`requirements-dev.txt`](requirements-dev.txt) | Dependencies used by the test suite. |
+| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | Runs pytest on pushes and pull requests. |
 | [`SAMPLE_ENV.txt`](SAMPLE_ENV.txt) | Example configuration to copy to `.env`. |
 | [`shutdown_services.sh`](shutdown_services.sh) | Helper used by key **0** to restart the launcher service. |
 | [`fonts/`](fonts/) | Bitmap fonts used by the display. |

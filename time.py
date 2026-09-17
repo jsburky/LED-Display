@@ -10,6 +10,7 @@ import os
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+from stock_data import parse_yahoo_chart
 
 APP_DIR = Path(__file__).resolve().parent
 FONT_DIR = APP_DIR / "fonts"
@@ -401,29 +402,7 @@ class GraphicsTest:
                 verify=SYSTEM_CA_BUNDLE,
             )
             response.raise_for_status()
-            chart = response.json()["chart"]["result"][0]
-            timestamps = chart.get("timestamp", [])
-            closes = chart["indicators"]["quote"][0].get("close", [])
-            bars = [
-                (timestamp, close)
-                for timestamp, close in zip(timestamps, closes)
-                if close is not None
-            ]
-            if not bars:
-                raise ValueError(f"Yahoo returned no closing prices for {symbol}")
-
-            status = 'flat'
-            latest_close = bars[-1][1]
-            price_text = f"{symbol}: ${latest_close:.2f}"
-
-            if len(bars) > 1:
-                previous_close = bars[-2][1]
-                if latest_close > previous_close:
-                    status = 'up'
-                elif latest_close < previous_close:
-                    status = 'down'
-
-            self.stock_prices[symbol] = {'text': price_text, 'status': status}
+            self.stock_prices[symbol] = parse_yahoo_chart(response.json(), symbol)
             self.last_update_times[symbol] = datetime.now()
             self.save_stock_prices()
 
