@@ -167,6 +167,10 @@ environment by default. Use `--remove-venv`, `--remove-cache`, or
 `--remove-log` when those items should also be removed. Console autologin is
 not changed by the uninstall script.
 
+Run tests as the project user rather than with `sudo`; root-run Python commands
+can create root-owned `__pycache__` files. The uninstall script removes any
+leftover generated Python caches.
+
 There is no separate dependency-install or virtual-environment activation step.
 
 <details>
@@ -178,6 +182,7 @@ There is no separate dependency-install or virtual-environment activation step.
 - Disables onboard audio and blacklists `snd_bcm2835` for matrix operation.
 - Adds `isolcpus=3` to the boot command line.
 - Enables console autologin and creates `program_launcher.service` to run the launcher as root.
+- Disables Python bytecode generation for the service so it does not create root-owned `__pycache__` files in the checkout.
 - Enables the service at boot, then reboots.
 
 Before its first edits to the boot and audio configuration files, the script saves copies with a `.led-display.bak` suffix.

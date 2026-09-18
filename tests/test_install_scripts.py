@@ -16,3 +16,15 @@ def test_uninstaller_only_removes_owned_project_environment():
 
     assert 'VENV_DIR="$PROJECT_DIR/.venv"' in uninstaller
     assert 'if [[ -f "$VENV_MARKER" ]]' in uninstaller
+
+
+def test_service_disables_project_bytecode_creation():
+    installer = (PROJECT_DIR / "install.sh").read_text()
+
+    assert "Environment=PYTHONDONTWRITEBYTECODE=1" in installer
+
+
+def test_uninstaller_removes_generated_bytecode_caches():
+    uninstaller = (PROJECT_DIR / "uninstall.sh").read_text()
+
+    assert "-name '__pycache__'" in uninstaller

@@ -58,6 +58,10 @@ systemctl disable --now program_launcher.service 2>/dev/null || true
 rm -f "$SERVICE_FILE"
 systemctl daemon-reload
 
+# The service historically started as root and could leave root-owned Python
+# bytecode caches in the checkout. Remove generated caches during uninstall.
+find "$PROJECT_DIR" -type d -name '__pycache__' -prune -exec rm -rf -- {} +
+
 restore_backup() {
     local file="$1"
     local backup="${file}.led-display.bak"

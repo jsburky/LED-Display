@@ -10,6 +10,9 @@ import os
 import shlex
 import subprocess
 import sys
+
+sys.dont_write_bytecode = True
+
 import threading
 from pathlib import Path
 

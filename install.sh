@@ -417,6 +417,7 @@ Restart=always
 RestartSec=5
 
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
 
 StandardOutput=journal
 StandardError=journal
