@@ -1,6 +1,8 @@
 import pytest
 
-from stock_data import parse_yahoo_chart
+from datetime import datetime, timezone
+
+from stock_data import cache_entry_is_stale, parse_yahoo_chart
 
 
 def chart_data(closes, previous_close=None):
@@ -47,3 +49,11 @@ def test_parse_yahoo_chart_skips_missing_close_values():
 def test_parse_yahoo_chart_rejects_empty_data():
     with pytest.raises(ValueError, match="no closing prices"):
         parse_yahoo_chart(chart_data([None, None]), "AAPL")
+
+
+def test_cache_entry_stale_detection():
+    now = datetime(2026, 9, 17, 12, tzinfo=timezone.utc)
+
+    assert cache_entry_is_stale("2026-09-17T11:44:59+00:00", now, 900)
+    assert not cache_entry_is_stale("2026-09-17T11:45:01+00:00", now, 900)
+    assert cache_entry_is_stale(None, now, 900)

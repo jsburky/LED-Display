@@ -2,7 +2,7 @@
 import argparse
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import requests
 import threading
 import json
@@ -10,7 +10,7 @@ import os
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-from stock_data import parse_yahoo_chart
+from stock_data import cache_entry_is_stale, parse_yahoo_chart
 
 APP_DIR = Path(__file__).resolve().parent
 FONT_DIR = APP_DIR / "fonts"
@@ -20,6 +20,7 @@ SYSTEM_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
 YAHOO_CHART_RANGE = os.environ.get("YAHOO_CHART_RANGE", "1d")
 YAHOO_CHART_INTERVAL = os.environ.get("YAHOO_CHART_INTERVAL", "1m")
 STOCK_REQUEST_DELAY_SECONDS = float(os.environ.get("STOCK_REQUEST_DELAY_SECONDS", "2"))
+STOCK_CACHE_STALE_SECONDS = int(os.environ.get("STOCK_CACHE_STALE_SECONDS", "900"))
 
 USE_MANUAL_COORDINATES = False
 MANUAL_LATITUDE = 0.0
@@ -324,9 +325,17 @@ class GraphicsTest:
         self.weather_update_interval = 300  # Fetch new weather data every 5 minutes
 
         self.weather_data = None
+        self.weather_data_lock = threading.Lock()
+        self.weather_stop_event = threading.Event()
         self.show_weather_icon = False
         self.last_weather_toggle_time = 0
         self.weather_toggle_interval = 15 # Switch between temp and icon every 15 seconds
+
+        self.weather_thread = threading.Thread(
+            target=self.weather_update_loop,
+            daemon=True,
+        )
+        self.weather_thread.start()
 
         self.top_font = graphics.Font()
         self.top_font.LoadFont(str(FONT_DIR / "9x18B.bdf"))
@@ -338,7 +347,13 @@ class GraphicsTest:
             stock_prices_path = STOCK_CACHE_PATH
             if stock_prices_path.exists():
                 with stock_prices_path.open("r") as f:
-                    return json.load(f)
+                    stock_prices = json.load(f)
+                for stock_data in stock_prices.values():
+                    stock_data["stale"] = cache_entry_is_stale(
+                        stock_data.get("updated_at"),
+                        max_age_seconds=STOCK_CACHE_STALE_SECONDS,
+                    )
+                return stock_prices
             else:
                 return {} # Initialize as empty dict for new structure
         except Exception:
@@ -377,8 +392,19 @@ class GraphicsTest:
     def get_weather_data(self, lat, lon):
         """Fetches temperature, condition, and day/night status."""
         try:
-            weather_url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&units=imperial&appid={self.weather_api_key}"
-            response = requests.get(weather_url)
+            weather_url = "https://api.openweathermap.org/data/2.5/weather"
+            response = requests.get(
+                weather_url,
+                params={
+                    "lat": lat,
+                    "lon": lon,
+                    "units": "imperial",
+                    "appid": self.weather_api_key,
+                },
+                timeout=(5, 10),
+                verify=SYSTEM_CA_BUNDLE,
+            )
+            response.raise_for_status()
             data = response.json()
             temperature = float(data['main']['temp'])
             condition = data['weather'][0]['main']
@@ -390,6 +416,18 @@ class GraphicsTest:
         except Exception:
             self.logger.exception("Error fetching weather data")
             return None
+
+    def weather_update_loop(self):
+        while not self.weather_stop_event.is_set():
+            if self.weather_latitude is not None and self.weather_longitude is not None:
+                fetched_data = self.get_weather_data(
+                    self.weather_latitude,
+                    self.weather_longitude,
+                )
+                if fetched_data:
+                    with self.weather_data_lock:
+                        self.weather_data = fetched_data
+            self.weather_stop_event.wait(self.weather_update_interval)
 
     def update_stock_price(self, symbol):
         """Fetch the latest two Yahoo Finance intraday bars."""
@@ -409,7 +447,11 @@ class GraphicsTest:
                 verify=SYSTEM_CA_BUNDLE,
             )
             response.raise_for_status()
-            self.stock_prices[symbol] = parse_yahoo_chart(response.json(), symbol)
+            self.stock_prices[symbol] = {
+                **parse_yahoo_chart(response.json(), symbol),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "stale": False,
+            }
             self.last_update_times[symbol] = datetime.now()
             self.save_stock_prices()
 
@@ -527,15 +569,6 @@ class GraphicsTest:
                     self.show_weather_icon = not self.show_weather_icon
                     self.last_weather_toggle_time = time.time()
 
-                if time.time() - self.last_weather_update >= self.weather_update_interval:
-                    if self.weather_latitude is not None and self.weather_longitude is not None:
-                        fetched_data = self.get_weather_data(
-                            self.weather_latitude, self.weather_longitude
-                        )
-                        if fetched_data:
-                            self.weather_data = fetched_data
-                    self.last_weather_update = time.time()
-
                 buffer.Clear()
 
                 # --- Draw the static parts of the display ---
@@ -547,10 +580,13 @@ class GraphicsTest:
                 graphics.DrawText(buffer, top_font, 40, 43, white, day)
 
                 # --- Temperature / Icon Drawing Logic ---
-                if self.weather_data:
+                with self.weather_data_lock:
+                    weather_data = self.weather_data
+
+                if weather_data:
                     if self.show_weather_icon:
-                        condition = self.weather_data['condition']
-                        is_day = self.weather_data['is_day']
+                        condition = weather_data['condition']
+                        is_day = weather_data['is_day']
                         layers = []
 
                         if condition == "Clear":
@@ -572,7 +608,7 @@ class GraphicsTest:
                         self.draw_layered_icon(buffer, 1, 20, layers)
 
                     else:
-                        temp_display = f"{round(self.weather_data['temperature'])}°"
+                        temp_display = f"{round(weather_data['temperature'])}°"
                         font_width = 9
                         text_width = len(temp_display) * font_width
                         centered_x = (32 - text_width) // 2
@@ -589,7 +625,12 @@ class GraphicsTest:
                     if not stock_data: continue
 
                     # Draw Price Text
-                    price_text = stock_data['text'] + " "
+                    stale = stock_data.get("stale", False) or cache_entry_is_stale(
+                        stock_data.get("updated_at"),
+                        max_age_seconds=STOCK_CACHE_STALE_SECONDS,
+                    )
+                    stale_marker = "*" if stale else ""
+                    price_text = stock_data['text'] + stale_marker + " "
                     text_width = graphics.DrawText(buffer, ticker_font, current_x, 59, white, price_text)
                     current_x += text_width
                     temp_total_width += text_width

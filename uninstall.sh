@@ -49,7 +49,9 @@ if [[ -z "$TARGET_USER" ]] || ! getent passwd "$TARGET_USER" >/dev/null; then
     exit 1
 fi
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
-VENV_DIR="$TARGET_HOME/.venv"
+VENV_DIR="$PROJECT_DIR/.venv"
+VENV_MARKER="$VENV_DIR/.led-display-owned"
+HOME_MODE_FILE="$PROJECT_DIR/.led-display-home-mode"
 
 echo "Stopping program_launcher.service..."
 systemctl disable --now program_launcher.service 2>/dev/null || true
@@ -70,9 +72,19 @@ restore_backup "$CONFIG_FILE"
 restore_backup "$CMDLINE_FILE"
 restore_backup "$BLACKLIST_FILE"
 
+if [[ -f "$HOME_MODE_FILE" ]]; then
+    chmod "$(<"$HOME_MODE_FILE")" "$TARGET_HOME"
+    rm -f "$HOME_MODE_FILE"
+    echo "Restored $TARGET_HOME permissions"
+fi
+
 if [[ "$REMOVE_VENV" == true ]]; then
-    rm -rf -- "$VENV_DIR"
-    echo "Removed $VENV_DIR"
+    if [[ -f "$VENV_MARKER" ]]; then
+        rm -rf -- "$VENV_DIR"
+        echo "Removed $VENV_DIR"
+    else
+        echo "Kept $VENV_DIR: ownership marker not found"
+    fi
 fi
 if [[ "$REMOVE_CACHE" == true ]]; then
     rm -f -- "$PROJECT_DIR/stock_prices.json"

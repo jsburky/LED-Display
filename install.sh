@@ -28,9 +28,11 @@ TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 TARGET_GROUP="$(id -gn "$TARGET_USER")"
 
 
-# IMPORTANT:
-# Match the old working installation exactly.
-VENV_DIR="$TARGET_HOME/.venv"
+# Keep this environment owned by this checkout so uninstall cannot remove a
+# shared environment used by another project.
+VENV_DIR="$PROJECT_DIR/.venv"
+VENV_MARKER="$VENV_DIR/.led-display-owned"
+HOME_MODE_FILE="$PROJECT_DIR/.led-display-home-mode"
 PYTHON="$VENV_DIR/bin/python3"
 
 MAIN_SCRIPT="$PROJECT_DIR/main.py"
@@ -156,6 +158,8 @@ if [[ ! -d "$VENV_DIR" ]]; then
 
     sudo -u "$TARGET_USER" -H \
         python3 -m venv "$VENV_DIR"
+
+    sudo -u "$TARGET_USER" -H touch "$VENV_MARKER"
 
 else
 
@@ -365,7 +369,13 @@ echo "[12/15] Configuring project permissions..."
 
 # time.py runs as daemon after the matrix library drops root privileges.
 # Keep the cache's owner and contents, but allow daemon to save stock prices.
+if [[ ! -f "$HOME_MODE_FILE" ]]; then
+    stat -c '%a' "$TARGET_HOME" > "$HOME_MODE_FILE"
+fi
 chmod o+x "$TARGET_HOME"
+if [[ ! -e "$PROJECT_DIR/stock_prices.json" ]]; then
+    install -o "$TARGET_USER" -g daemon -m 664 /dev/null "$PROJECT_DIR/stock_prices.json"
+fi
 chgrp daemon "$PROJECT_DIR/stock_prices.json"
 chmod g+w "$PROJECT_DIR/stock_prices.json"
 

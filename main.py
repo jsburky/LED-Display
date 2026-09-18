@@ -27,6 +27,11 @@ DEFAULT_CLOCK_COMMAND = [
     "--led-slowdown-gpio=4",
 ]
 DEFAULT_DEVICE = os.environ.get("LED_INPUT_DEVICE")
+SUPPORTED_KEY_COMMANDS = {
+    **{f"KEY_{digit}": str(digit) for digit in range(10)},
+    **{f"KEY_KP{digit}": str(digit) for digit in range(10)},
+}
+CHILD_RESTART_BACKOFF_SECONDS = 2
 
 
 def parse_args():
@@ -108,19 +113,28 @@ def build_commands(clock_command):
         "9": ["sudo", "reboot"],
     }
 
-# Global variable to store the current subprocess
+# Global state for the currently running command.
 current_process = None
 reset_timer = None
 process_lock = threading.Lock()
+supervisor_stop_event = threading.Event()
+clock_process_supervised = False
 commands = {}
 restart_seconds = 3600
 
-# Define a function to execute commands
+# Stop a child completely before replacing it.
 def stop_current_process():
-    global current_process, reset_timer
+    global current_process, reset_timer, clock_process_supervised
     if current_process is not None:
-        current_process.terminate()
+        process = current_process
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
         current_process = None
+        clock_process_supervised = False
         print("Cancelled current command")
     if reset_timer is not None:
         reset_timer.cancel()
@@ -128,7 +142,7 @@ def stop_current_process():
 
 
 def execute_command(key):
-    global current_process, reset_timer
+    global current_process, reset_timer, clock_process_supervised
     command = commands.get(key)
     if command is None:
         return
@@ -136,31 +150,67 @@ def execute_command(key):
     with process_lock:
         stop_current_process()
         current_process = subprocess.Popen(command)
+        clock_process_supervised = key == "1"
         if key == "1" and restart_seconds > 0:
             reset_timer = threading.Timer(restart_seconds, restart_clock)
             reset_timer.daemon = True
             reset_timer.start()
 
-# Define a function to restart the clock script
 def restart_clock():
-    global current_process, reset_timer
+    global current_process, reset_timer, clock_process_supervised
     with process_lock:
-        if current_process is not None:
-            current_process.terminate()
-            print("Restarting clock script")
-            current_process = subprocess.Popen(commands["1"])
-            reset_timer = threading.Timer(restart_seconds, restart_clock)
-            reset_timer.daemon = True
-            reset_timer.start()
+        if current_process is None or not clock_process_supervised:
+            return
+        stop_current_process()
+        print("Restarting clock script")
+        current_process = subprocess.Popen(commands["1"])
+        clock_process_supervised = True
+        reset_timer = threading.Timer(restart_seconds, restart_clock)
+        reset_timer.daemon = True
+        reset_timer.start()
 
-# Define a function to read input from the keypad
+
+def command_key_for_keycode(keycode):
+    return SUPPORTED_KEY_COMMANDS.get(keycode)
+
+
+def monitor_clock_process():
+    global current_process, clock_process_supervised
+    while not supervisor_stop_event.is_set():
+        with process_lock:
+            process = current_process
+            supervised = clock_process_supervised
+
+        if process is None or not supervised:
+            supervisor_stop_event.wait(0.25)
+            continue
+
+        return_code = process.poll()
+        if return_code is None:
+            supervisor_stop_event.wait(0.25)
+            continue
+
+        with process_lock:
+            if current_process is process:
+                current_process = None
+                clock_process_supervised = False
+
+        if supervisor_stop_event.wait(CHILD_RESTART_BACKOFF_SECONDS):
+            break
+
+        with process_lock:
+            if current_process is None and not supervisor_stop_event.is_set():
+                current_process = subprocess.Popen(commands["1"])
+                clock_process_supervised = True
+
 def read_keypad(device):
     for event in device.read_loop():
         if event.type == ecodes.EV_KEY:
             key_event = categorize(event)
             if key_event.keystate == key_event.key_down:
-                key = str(key_event.keycode[-1])
-                execute_command(key)
+                key = command_key_for_keycode(key_event.keycode)
+                if key is not None:
+                    execute_command(key)
 
 def main():
     global commands, restart_seconds
@@ -169,6 +219,8 @@ def main():
     restart_seconds = args.restart_seconds
     device = find_keypad(args.device)
 
+    supervisor_thread = threading.Thread(target=monitor_clock_process, daemon=True)
+    supervisor_thread.start()
     execute_command("1")
     keypad_thread = threading.Thread(target=read_keypad, args=(device,), daemon=True)
     keypad_thread.start()
@@ -178,6 +230,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        supervisor_stop_event.set()
         with process_lock:
             stop_current_process()
         device.close()

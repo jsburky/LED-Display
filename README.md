@@ -173,7 +173,7 @@ There is no separate dependency-install or virtual-environment activation step.
 <summary>What the installer does</summary>
 
 - Installs the system packages needed to build and run the project.
-- Creates or reuses `~/.venv` for the user who invoked `sudo`.
+- Creates a project-local `.venv` and marks environments created by this installer as removable.
 - Installs `requirements.txt`, including the RGB matrix Python bindings, and checks key imports.
 - Disables onboard audio and blacklists `snd_bcm2835` for matrix operation.
 - Adds `isolcpus=3` to the boot command line.
@@ -307,11 +307,11 @@ Display and API errors are also written to `error.log` in the project directory,
 | Blank display after reboot | Check service logs, panel power, the ribbon cable's **IN** connection, and the E-to-8 solder bridge. |
 | `No keypad found` | Connect a USB keypad/keyboard to the Pi. SSH input does not provide the local input device the launcher expects. Use a manual device setting if detection fails. |
 | `Multiple input devices found` | Select the intended keypad using the systemd override above. |
-| `No module named rgbmatrix` or `rgbmatrix.core` | Confirm the installer completed its import checks, and run with `~/.venv/bin/python3`. A different Python installation may not have the compiled bindings. |
+| `No module named rgbmatrix` or `rgbmatrix.core` | Confirm the installer completed its import checks, and run with `.venv/bin/python3` from the project directory. |
 | Font-loading error | Keep the included `fonts/` directory beside `time.py` and ensure the files are readable. |
-| Weather shows `...` | Check the OpenWeather key, network connection, location settings, and display error log. |
+| Weather shows `...` | Check the OpenWeather key, network connection, location settings, and display error log. Weather refreshes in the background so the clock and ticker continue drawing while a request is slow. |
 | Weather is for the wrong place | Set manual coordinates in `time.py`; IP-based location can be approximate. |
-| Stock prices show `N/A` or stay unchanged | Check internet access, Yahoo Finance availability, symbol availability, and the error log. Cached prices may remain after failed requests; daily prices update with trading days. |
+| Stock prices show `N/A` or stay unchanged | Check internet access, Yahoo Finance availability, symbol availability, and the error log. A trailing `*` marks a cached value older than 15 minutes. |
 | Visible flicker | Check the power supply and GPIO timing. If you installed the GPIO 4-to-18 jumper, select `adafruit-hat-pwm`. |
 | Installer cannot find `/boot/firmware/config.txt` | Check the Raspberry Pi OS version and boot-file layout against the installer requirements above. |
 | Time is incorrect | Check the Pi's timezone and time synchronization with `timedatectl`. |
@@ -331,7 +331,7 @@ Display and API errors are also written to `error.log` in the project directory,
 | [`shutdown_services.sh`](shutdown_services.sh) | Helper used by key **0** to restart the launcher service. |
 | [`fonts/`](fonts/) | Bitmap fonts used by the display. |
 | [`assets/`](assets/) | Project and assembly photos. |
-| [`stock_prices.json`](stock_prices.json) | Cached stock prices; the running display attempts to update this file. |
+| `stock_prices.json` | Runtime-generated stock cache; it is not shipped with the project. A trailing `*` marks cached data older than 15 minutes. |
 
 ## Credits and license
 

@@ -1,5 +1,20 @@
 """Helpers for turning Yahoo Finance chart responses into ticker records."""
 
+from datetime import datetime, timezone
+
+
+def cache_entry_is_stale(updated_at, now=None, max_age_seconds=900):
+    if not updated_at:
+        return True
+    try:
+        updated_time = datetime.fromisoformat(updated_at)
+        if updated_time.tzinfo is None:
+            updated_time = updated_time.replace(tzinfo=timezone.utc)
+        current_time = now or datetime.now(timezone.utc)
+        return (current_time - updated_time).total_seconds() > max_age_seconds
+    except (TypeError, ValueError):
+        return True
+
 
 def parse_yahoo_chart(data, symbol):
     """Return display text and direction from a Yahoo chart response."""
