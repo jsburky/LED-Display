@@ -36,7 +36,7 @@ This guide covers **one 64x64 HUB75 panel, an Adafruit RGB Matrix Bonnet, and a 
 | Raspberry Pi power supply | Use a suitable supply connected to the Pi's power port. |
 | microSD card | For Raspberry Pi OS and the project files. |
 | USB numeric keypad or keyboard | Required by the default launcher, including at boot. |
-| Soldering iron, solder, and jumper wire | For the bonnet's address connection and optional flicker reduction. |
+| Soldering iron, solder, and jumper wire | For the bonnet's E-to-8 address connection and the default GPIO 4-to-18 PWM jumper. |
 | Computer and network connection | For imaging the card and connecting over SSH. A local monitor and keyboard also work. |
 
 Internet access is needed for installation, weather, automatic location lookup, and stock updates. You will need an API key from **OpenWeather**; setup is covered below.
@@ -77,9 +77,9 @@ On the underside of the bonnet, bridge the center **E** pad to the **8** pad wit
 
 Power the panel through the bonnet's DC input and the Pi through its own power port. See [Adafruit's power guidance](https://learn.adafruit.com/adafruit-rgb-matrix-bonnet-for-raspberry-pi/pinouts) for supply requirements.
 
-### 3. Optional: reduce flicker
+### 3. Install the default PWM jumper
 
-Solder a jumper between the bonnet pads labeled **GPIO 4** and **GPIO 18**. These are GPIO numbers, not physical header pin numbers.
+Solder a jumper between the bonnet pads labeled **GPIO 4** and **GPIO 18**. These are GPIO numbers, not physical header pin numbers. This jumper is part of the default setup for this project.
 
 <details>
 <summary>Photo: GPIO 4-to-18 jumper</summary>
@@ -90,7 +90,7 @@ Solder a jumper between the bonnet pads labeled **GPIO 4** and **GPIO 18**. Thes
 
 </details>
 
-To use this modification, select **`adafruit-hat-pwm`** in the [display settings](#display-settings). The launcher currently defaults to `adafruit-hat`; installing the jumper does not change that setting automatically. See the matrix library's [hardware modification instructions](https://github.com/hzeller/rpi-rgb-led-matrix#improving-flicker-hardware-patch).
+The project uses **`adafruit-hat-pwm`** by default with this jumper installed. See the matrix library's [hardware modification instructions](https://github.com/hzeller/rpi-rgb-led-matrix#improving-flicker-hardware-patch).
 
 ## Set up Raspberry Pi OS
 
@@ -225,11 +225,11 @@ cd ~/LED-Display
 sudo "$HOME/.venv/bin/python3" time.py \
   --led-rows=64 \
   --led-cols=64 \
-  --led-gpio-mapping=adafruit-hat \
+  --led-gpio-mapping=adafruit-hat-pwm \
   --led-slowdown-gpio=4
 ```
 
-Use `adafruit-hat-pwm` for the GPIO 4-to-18 modification. Press **Ctrl+C** to exit, then start the service again to restore keypad control.
+The GPIO 4-to-18 jumper and `adafruit-hat-pwm` mapping are the default setup. Press **Ctrl+C** to exit, then start the service again to restore keypad control.
 
 ## Configuration
 
@@ -256,7 +256,7 @@ For automatic startup, edit `DEFAULT_CLOCK_COMMAND` near the top of `main.py`. F
 | Option | Launcher setting | Purpose |
 | --- | --- | --- |
 | `--led-rows` / `--led-cols` | `64` / `64` | Panel dimensions. |
-| `-m` / `--led-gpio-mapping` | `adafruit-hat` | Use `adafruit-hat-pwm` with the GPIO 4-to-18 jumper. |
+| `-m` / `--led-gpio-mapping` | `adafruit-hat-pwm` | Default mapping for the GPIO 4-to-18 jumper. |
 | `--led-slowdown-gpio` | `4` | GPIO timing; may need adjustment for a different Pi or panel. |
 | `--led-brightness` | `100` by default | Add, for example, `--led-brightness=50` to lower brightness. |
 
@@ -317,7 +317,7 @@ Display and API errors are also written to `error.log` in the project directory,
 | Weather shows `...` | Check the OpenWeather key, network connection, location settings, and display error log. Weather refreshes in the background so the clock and ticker continue drawing while a request is slow. |
 | Weather is for the wrong place | Set manual coordinates in `time.py`; IP-based location can be approximate. |
 | Stock prices show `N/A` or stay unchanged | Check internet access, Yahoo Finance availability, symbol availability, and the error log. A trailing `*` marks a cached value older than 15 minutes. |
-| Visible flicker | Check the power supply and GPIO timing. If you installed the GPIO 4-to-18 jumper, select `adafruit-hat-pwm`. |
+| Visible flicker | Check the power supply, the GPIO 4-to-18 jumper, and the `adafruit-hat-pwm` mapping. |
 | Installer cannot find `/boot/firmware/config.txt` | Check the Raspberry Pi OS version and boot-file layout against the installer requirements above. |
 | Time is incorrect | Check the Pi's timezone and time synchronization with `timedatectl`. |
 
